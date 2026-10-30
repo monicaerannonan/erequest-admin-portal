@@ -16,8 +16,8 @@ import ProtectedRoute
 import AdminLayout
   from "./layouts/AdminLayout";
 
-const LoginPage =
-  lazy(() => import("./features/auth/LoginPage"));
+import LoginPage
+  from "./features/auth/LoginPage";
 
 const DashboardPage =
   lazy(() => import("./features/dashboard/DashboardPage"));
@@ -72,17 +72,12 @@ function App() {
 
 
         {/* =====================================================
-            DEFAULT
+            DEFAULT / LOGIN
             ===================================================== */}
 
         <Route
           path="/"
-          element={
-            <Navigate
-              to="/login"
-              replace
-            />
-          }
+          element={<LoginPage initialMode="login" />}
         />
 
 
@@ -235,12 +230,7 @@ function App() {
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/login"
-              replace
-            />
-          }
+          element={<LoginPage initialMode="login" />}
         />
 
 

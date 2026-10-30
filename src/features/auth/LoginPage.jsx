@@ -73,7 +73,7 @@ function LoginPage({ initialMode = "login" }) {
         setErrorMessage("");
         setSuccessMessage("");
       }
-    } else if (location.pathname === "/login") {
+    } else if (location.pathname === "/login" || location.pathname === "/") {
       const params = new URLSearchParams(location.search);
       const isModeForgot =
         params.get("mode") === "forgot_password" ||
