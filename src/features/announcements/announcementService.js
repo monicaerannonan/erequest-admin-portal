@@ -103,18 +103,15 @@ export const addAnnouncement = async (
   );
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "announcement",
-      action: "added",
-      title: cleanTitle,
-      description: "New announcement added",
-      recordId: documentReference.id
-    });
-  } catch (logErr) {
+  addActivityLog({
+    type: "announcement",
+    action: "added",
+    title: cleanTitle,
+    description: "New announcement added",
+    recordId: documentReference.id
+  }).catch((logErr) => {
     console.warn("Announcement activity log notice:", logErr?.message || logErr);
-  }
+  });
 
   return documentReference.id;
 };
@@ -172,18 +169,15 @@ export const updateAnnouncement = async (
   });
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "announcement",
-      action: "updated",
-      title: cleanTitle,
-      description: "Announcement information updated",
-      recordId: announcementId
-    });
-  } catch (logErr) {
+  addActivityLog({
+    type: "announcement",
+    action: "updated",
+    title: cleanTitle,
+    description: "Announcement information updated",
+    recordId: announcementId
+  }).catch((logErr) => {
     console.warn("Announcement activity log notice:", logErr?.message || logErr);
-  }
+  });
 };
 
 
@@ -201,50 +195,40 @@ export const setAnnouncementActiveStatus = async (
     );
   }
 
-  /*
-   * Get announcement information first
-   * so we know its title for Recent Updates.
-   */
-
   const announcementRef = doc(
     db,
     ANNOUNCEMENTS_COLLECTION,
     announcementId
   );
 
-  const announcementSnap =
-    await getDoc(announcementRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const announcementSnap = await getDoc(announcementRef);
+      const announcementTitle =
+        (announcementSnap.exists() && announcementSnap.data()?.title) ||
+        "Announcement";
 
-  const announcementTitle =
-    (announcementSnap.exists() && announcementSnap.data()?.title) ||
-    "Announcement";
+      await addActivityLog({
+        type: "announcement",
+        action: isActive ? "activated" : "deactivated",
+        title: announcementTitle,
+        description: isActive
+          ? "Announcement activated"
+          : "Announcement deactivated",
+        recordId: announcementId
+      });
+    } catch (logErr) {
+      console.warn("Announcement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await updateDoc(announcementRef, {
     isActive: Boolean(isActive),
     updatedAt: serverTimestamp()
   });
 
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "announcement",
-
-      action: isActive
-        ? "activated"
-        : "deactivated",
-
-      title: announcementTitle,
-
-      description: isActive
-        ? "Announcement activated"
-        : "Announcement deactivated",
-
-      recordId: announcementId
-    });
-  } catch (logErr) {
-    console.warn("Announcement activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 };
 
 
@@ -261,37 +245,32 @@ export const deleteAnnouncement = async (
     );
   }
 
-  /*
-   * Get announcement BEFORE deletion.
-   * After deletion, we can no longer retrieve its title.
-   */
-
   const announcementRef = doc(
     db,
     ANNOUNCEMENTS_COLLECTION,
     announcementId
   );
 
-  const announcementSnap =
-    await getDoc(announcementRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const announcementSnap = await getDoc(announcementRef);
+      const announcementTitle =
+        (announcementSnap.exists() && announcementSnap.data()?.title) ||
+        "Announcement";
 
-  const announcementTitle =
-    (announcementSnap.exists() && announcementSnap.data()?.title) ||
-    "Announcement";
+      await addActivityLog({
+        type: "announcement",
+        action: "deleted",
+        title: announcementTitle,
+        description: "Announcement deleted",
+        recordId: announcementId
+      });
+    } catch (logErr) {
+      console.warn("Announcement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await deleteDoc(announcementRef);
-
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "announcement",
-      action: "deleted",
-      title: announcementTitle,
-      description: "Announcement deleted",
-      recordId: announcementId
-    });
-  } catch (logErr) {
-    console.warn("Announcement activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 };

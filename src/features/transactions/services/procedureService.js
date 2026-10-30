@@ -84,9 +84,15 @@ export async function getProcedureStepsByTransactionId(transactionId) {
    Used for Recent Updates
    ========================================= */
 
+const transactionNameCache = new Map();
+
 async function getTransactionName(transactionId) {
   if (!transactionId) {
     return "";
+  }
+
+  if (transactionNameCache.has(transactionId)) {
+    return transactionNameCache.get(transactionId);
   }
 
   try {
@@ -102,7 +108,11 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    return docSnap.data()?.name || "";
+    const name = docSnap.data()?.name || "";
+    if (name) {
+      transactionNameCache.set(transactionId, name);
+    }
+    return name;
   } catch (error) {
     console.error(
       "Failed to get transaction name:",
@@ -195,23 +205,23 @@ export async function addProcedureStep(
   );
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "procedure",
-      action: "added",
-      title: `Step ${cleanStepNumber}: ${cleanInstruction}`,
-      description: "New procedure step added",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: procedureId
-    });
-  } catch (logErr) {
-    console.warn("Procedure activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "procedure",
+        action: "added",
+        title: `Step ${cleanStepNumber}: ${cleanInstruction}`,
+        description: "New procedure step added",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: procedureId
+      });
+    } catch (logErr) {
+      console.warn("Procedure activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   return procedureId;
 }
@@ -299,23 +309,23 @@ export async function updateProcedureStep(
   });
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "procedure",
-      action: "updated",
-      title: `Step ${cleanStepNumber}: ${cleanInstruction}`,
-      description: "Procedure step updated",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: procedureId
-    });
-  } catch (logErr) {
-    console.warn("Procedure activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "procedure",
+        action: "updated",
+        title: `Step ${cleanStepNumber}: ${cleanInstruction}`,
+        description: "Procedure step updated",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: procedureId
+      });
+    } catch (logErr) {
+      console.warn("Procedure activity log notice:", logErr?.message || logErr);
+    }
+  })();
 }
 
 
@@ -339,57 +349,46 @@ export async function setProcedureStepActiveStatus(
     procedureId
   );
 
-  /*
-   * Get procedure information first so
-   * Recent Updates knows the instruction,
-   * step number and transaction.
-   */
-  const procedureSnap =
-    await getDoc(procedureRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const procedureSnap = await getDoc(procedureRef);
+      const procedureData = procedureSnap.exists()
+        ? procedureSnap.data()
+        : null;
+      const instruction =
+        procedureData?.instruction || "Procedure Step";
+      const stepNumber =
+        procedureData?.stepNumber || "";
+      const transactionId =
+        procedureData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const procedureData =
-    procedureSnap.exists()
-      ? procedureSnap.data()
-      : null;
-
-  const instruction =
-    procedureData?.instruction || "Procedure Step";
-
-  const stepNumber =
-    procedureData?.stepNumber || "";
-
-  const transactionId =
-    procedureData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "procedure",
+        action: isActive ? "activated" : "deactivated",
+        title: stepNumber
+          ? `Step ${stepNumber}: ${instruction}`
+          : instruction,
+        description: isActive
+          ? "Procedure step activated"
+          : "Procedure step deactivated",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: procedureId
+      });
+    } catch (logErr) {
+      console.warn("Procedure activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await updateDoc(procedureRef, {
     isActive,
     updatedAt: serverTimestamp()
   });
 
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "procedure",
-      action: isActive
-        ? "activated"
-        : "deactivated",
-      title: stepNumber
-        ? `Step ${stepNumber}: ${instruction}`
-        : instruction,
-      description: isActive
-        ? "Procedure step activated"
-        : "Procedure step deactivated",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: procedureId
-    });
-  } catch (logErr) {
-    console.warn("Procedure activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }
 
 
@@ -412,49 +411,40 @@ export async function deleteProcedureStep(
     procedureId
   );
 
-  /*
-   * Get procedure information BEFORE
-   * deleting the Firestore document.
-   */
-  const procedureSnap =
-    await getDoc(procedureRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const procedureSnap = await getDoc(procedureRef);
+      const procedureData = procedureSnap.exists()
+        ? procedureSnap.data()
+        : null;
+      const instruction =
+        procedureData?.instruction || "Procedure Step";
+      const stepNumber =
+        procedureData?.stepNumber || "";
+      const transactionId =
+        procedureData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const procedureData =
-    procedureSnap.exists()
-      ? procedureSnap.data()
-      : null;
-
-  const instruction =
-    procedureData?.instruction || "Procedure Step";
-
-  const stepNumber =
-    procedureData?.stepNumber || "";
-
-  const transactionId =
-    procedureData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "procedure",
+        action: "deleted",
+        title: stepNumber
+          ? `Step ${stepNumber}: ${instruction}`
+          : instruction,
+        description: "Procedure step deleted",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: procedureId
+      });
+    } catch (logErr) {
+      console.warn("Procedure activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await deleteDoc(procedureRef);
-
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "procedure",
-      action: "deleted",
-      title: stepNumber
-        ? `Step ${stepNumber}: ${instruction}`
-        : instruction,
-      description: "Procedure step deleted",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: procedureId
-    });
-  } catch (logErr) {
-    console.warn("Procedure activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }
 
 

@@ -161,19 +161,15 @@ export async function addService(
   /* =======================================================
      ACTIVITY LOG (NON-BLOCKING)
      ======================================================= */
-
-  try {
-    await addActivityLog({
-      type: "service",
-      action: "added",
-      title: cleanName,
-      description: "New service added",
-      recordId: serviceId
-    });
-  } catch (logErr) {
+  addActivityLog({
+    type: "service",
+    action: "added",
+    title: cleanName,
+    description: "New service added",
+    recordId: serviceId
+  }).catch((logErr) => {
     console.warn("Service activity log notice:", logErr?.message || logErr);
-  }
-
+  });
 
   return serviceId;
 
@@ -243,18 +239,15 @@ export async function updateService(
   /* =======================================================
      ACTIVITY LOG (NON-BLOCKING)
      ======================================================= */
-
-  try {
-    await addActivityLog({
-      type: "service",
-      action: "updated",
-      title: cleanName,
-      description: "Service information updated",
-      recordId: serviceId
-    });
-  } catch (logErr) {
+  addActivityLog({
+    type: "service",
+    action: "updated",
+    title: cleanName,
+    description: "Service information updated",
+    recordId: serviceId
+  }).catch((logErr) => {
     console.warn("Service activity log notice:", logErr?.message || logErr);
-  }
+  });
 
 }
 
@@ -284,22 +277,25 @@ export async function setServiceActiveStatus(
       serviceId
     );
 
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const serviceSnap = await getDoc(serviceRef);
+      const serviceName =
+        (serviceSnap.exists() && serviceSnap.data()?.name) ||
+        "Service";
 
-  /*
-   * Get the service first so we can save
-   * its actual name in the activity log.
-   */
-
-  const serviceSnap =
-    await getDoc(
-      serviceRef
-    );
-
-
-  const serviceName =
-    (serviceSnap.exists() && serviceSnap.data()?.name) ||
-    "Service";
-
+      await addActivityLog({
+        type: "service",
+        action: isActive ? "activated" : "deactivated",
+        title: serviceName,
+        description: isActive ? "Service activated" : "Service deactivated",
+        recordId: serviceId
+      });
+    } catch (logErr) {
+      console.warn("Service activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await updateDoc(
     serviceRef,
@@ -314,22 +310,7 @@ export async function setServiceActiveStatus(
     }
   );
 
-
-  /* =======================================================
-     ACTIVITY LOG (NON-BLOCKING)
-     ======================================================= */
-
-  try {
-    await addActivityLog({
-      type: "service",
-      action: isActive ? "activated" : "deactivated",
-      title: serviceName,
-      description: isActive ? "Service activated" : "Service deactivated",
-      recordId: serviceId
-    });
-  } catch (logErr) {
-    console.warn("Service activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 
 }
 
@@ -416,36 +397,29 @@ export async function deleteService(
     );
 
 
-  const serviceSnap =
-    await getDoc(
-      serviceRef
-    );
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const serviceSnap = await getDoc(serviceRef);
+      const serviceName =
+        (serviceSnap.exists() && serviceSnap.data()?.name) ||
+        "Service";
 
-
-  const serviceName =
-    (serviceSnap.exists() && serviceSnap.data()?.name) ||
-    "Service";
-
+      await addActivityLog({
+        type: "service",
+        action: "deleted",
+        title: serviceName,
+        description: "Service deleted",
+        recordId: serviceId
+      });
+    } catch (logErr) {
+      console.warn("Service activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await deleteDoc(
     serviceRef
   );
 
-
-  /* =======================================================
-     ACTIVITY LOG (NON-BLOCKING)
-     ======================================================= */
-
-  try {
-    await addActivityLog({
-      type: "service",
-      action: "deleted",
-      title: serviceName,
-      description: "Service deleted",
-      recordId: serviceId
-    });
-  } catch (logErr) {
-    console.warn("Service activity log notice:", logErr?.message || logErr);
-  }
-
+  logPromise.catch(() => {});
 }

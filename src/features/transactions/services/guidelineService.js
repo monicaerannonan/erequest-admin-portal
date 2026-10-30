@@ -84,9 +84,15 @@ export async function getGuidelinesByTransactionId(transactionId) {
    For Recent Updates
    ========================================= */
 
+const transactionNameCache = new Map();
+
 async function getTransactionName(transactionId) {
   if (!transactionId) {
     return "";
+  }
+
+  if (transactionNameCache.has(transactionId)) {
+    return transactionNameCache.get(transactionId);
   }
 
   try {
@@ -102,7 +108,11 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    return docSnap.data()?.name || "";
+    const name = docSnap.data()?.name || "";
+    if (name) {
+      transactionNameCache.set(transactionId, name);
+    }
+    return name;
   } catch (error) {
     console.error(
       "Failed to get transaction name:",
@@ -168,23 +178,23 @@ export async function addGuideline(
   );
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "guideline",
-      action: "added",
-      title: cleanGuidelineText,
-      description: "New guideline added",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: guidelineId
-    });
-  } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "guideline",
+        action: "added",
+        title: cleanGuidelineText,
+        description: "New guideline added",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: guidelineId
+      });
+    } catch (logErr) {
+      console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   return guidelineId;
 }
@@ -245,23 +255,23 @@ export async function updateGuideline(
   });
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "guideline",
-      action: "updated",
-      title: cleanGuidelineText,
-      description: "Guideline information updated",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: guidelineId
-    });
-  } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "guideline",
+        action: "updated",
+        title: cleanGuidelineText,
+        description: "Guideline information updated",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: guidelineId
+      });
+    } catch (logErr) {
+      console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    }
+  })();
 }
 
 
@@ -285,50 +295,42 @@ export async function setGuidelineActiveStatus(
     guidelineId
   );
 
-  /*
-   * Get guideline information first.
-   */
-  const guidelineSnap =
-    await getDoc(guidelineRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const guidelineSnap = await getDoc(guidelineRef);
+      const guidelineData = guidelineSnap.exists()
+        ? guidelineSnap.data()
+        : null;
+      const guidelineName =
+        guidelineData?.guidelineText || "Guideline";
+      const transactionId =
+        guidelineData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const guidelineData =
-    guidelineSnap.exists()
-      ? guidelineSnap.data()
-      : null;
-
-  const guidelineName =
-    guidelineData?.guidelineText || "Guideline";
-
-  const transactionId =
-    guidelineData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "guideline",
+        action: isActive ? "activated" : "deactivated",
+        title: guidelineName,
+        description: isActive
+          ? "Guideline activated"
+          : "Guideline deactivated",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: guidelineId
+      });
+    } catch (logErr) {
+      console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await updateDoc(guidelineRef, {
     isActive,
     updatedAt: serverTimestamp()
   });
 
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "guideline",
-      action: isActive
-        ? "activated"
-        : "deactivated",
-      title: guidelineName,
-      description: isActive
-        ? "Guideline activated"
-        : "Guideline deactivated",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: guidelineId
-    });
-  } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }
 
 
@@ -349,41 +351,34 @@ export async function deleteGuideline(guidelineId) {
     guidelineId
   );
 
-  /*
-   * Get information BEFORE deletion.
-   */
-  const guidelineSnap =
-    await getDoc(guidelineRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const guidelineSnap = await getDoc(guidelineRef);
+      const guidelineData = guidelineSnap.exists()
+        ? guidelineSnap.data()
+        : null;
+      const guidelineName =
+        guidelineData?.guidelineText || "Guideline";
+      const transactionId =
+        guidelineData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const guidelineData =
-    guidelineSnap.exists()
-      ? guidelineSnap.data()
-      : null;
-
-  const guidelineName =
-    guidelineData?.guidelineText || "Guideline";
-
-  const transactionId =
-    guidelineData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "guideline",
+        action: "deleted",
+        title: guidelineName,
+        description: "Guideline deleted",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: guidelineId
+      });
+    } catch (logErr) {
+      console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await deleteDoc(guidelineRef);
-
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "guideline",
-      action: "deleted",
-      title: guidelineName,
-      description: "Guideline deleted",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: guidelineId
-    });
-  } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }

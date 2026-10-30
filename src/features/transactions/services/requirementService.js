@@ -113,9 +113,15 @@ export async function getActiveTransactions() {
    Used for Recent Updates
    ========================================= */
 
+const transactionNameCache = new Map();
+
 async function getTransactionName(transactionId) {
   if (!transactionId) {
     return "";
+  }
+
+  if (transactionNameCache.has(transactionId)) {
+    return transactionNameCache.get(transactionId);
   }
 
   try {
@@ -131,7 +137,11 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    return docSnap.data()?.name || "";
+    const name = docSnap.data()?.name || "";
+    if (name) {
+      transactionNameCache.set(transactionId, name);
+    }
+    return name;
   } catch (error) {
     console.error(
       "Failed to get transaction name:",
@@ -197,23 +207,23 @@ export async function addRequirement(
   );
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "requirement",
-      action: "added",
-      title: cleanRequirementText,
-      description: "New requirement added",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: requirementId
-    });
-  } catch (logErr) {
-    console.warn("Requirement activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "requirement",
+        action: "added",
+        title: cleanRequirementText,
+        description: "New requirement added",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: requirementId
+      });
+    } catch (logErr) {
+      console.warn("Requirement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   return requirementId;
 }
@@ -274,23 +284,23 @@ export async function updateRequirement(
   });
 
   /* ACTIVITY LOG (NON-BLOCKING) */
-
-  const transactionName =
-    await getTransactionName(cleanTransactionId);
-
-  try {
-    await addActivityLog({
-      type: "requirement",
-      action: "updated",
-      title: cleanRequirementText,
-      description: "Requirement information updated",
-      parentName: transactionName,
-      parentId: cleanTransactionId,
-      recordId: requirementId
-    });
-  } catch (logErr) {
-    console.warn("Requirement activity log notice:", logErr?.message || logErr);
-  }
+  (async () => {
+    try {
+      const transactionName =
+        await getTransactionName(cleanTransactionId);
+      await addActivityLog({
+        type: "requirement",
+        action: "updated",
+        title: cleanRequirementText,
+        description: "Requirement information updated",
+        parentName: transactionName,
+        parentId: cleanTransactionId,
+        recordId: requirementId
+      });
+    } catch (logErr) {
+      console.warn("Requirement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 }
 
 
@@ -314,48 +324,42 @@ export async function setRequirementActiveStatus(
     requirementId
   );
 
-  /* Get requirement before updating */
-  const requirementSnap =
-    await getDoc(requirementRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const requirementSnap = await getDoc(requirementRef);
+      const requirementData = requirementSnap.exists()
+        ? requirementSnap.data()
+        : null;
+      const requirementName =
+        requirementData?.requirementText || "Requirement";
+      const transactionId =
+        requirementData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const requirementData =
-    requirementSnap.exists()
-      ? requirementSnap.data()
-      : null;
-
-  const requirementName =
-    requirementData?.requirementText || "Requirement";
-
-  const transactionId =
-    requirementData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "requirement",
+        action: isActive ? "activated" : "deactivated",
+        title: requirementName,
+        description: isActive
+          ? "Requirement activated"
+          : "Requirement deactivated",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: requirementId
+      });
+    } catch (logErr) {
+      console.warn("Requirement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await updateDoc(requirementRef, {
     isActive,
     updatedAt: serverTimestamp()
   });
 
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "requirement",
-      action: isActive
-        ? "activated"
-        : "deactivated",
-      title: requirementName,
-      description: isActive
-        ? "Requirement activated"
-        : "Requirement deactivated",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: requirementId
-    });
-  } catch (logErr) {
-    console.warn("Requirement activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }
 
 
@@ -378,41 +382,34 @@ export async function deleteRequirement(
     requirementId
   );
 
-  /*
-   * Get information BEFORE deletion.
-   */
-  const requirementSnap =
-    await getDoc(requirementRef);
+  /* ACTIVITY LOG (NON-BLOCKING) */
+  const logPromise = (async () => {
+    try {
+      const requirementSnap = await getDoc(requirementRef);
+      const requirementData = requirementSnap.exists()
+        ? requirementSnap.data()
+        : null;
+      const requirementName =
+        requirementData?.requirementText || "Requirement";
+      const transactionId =
+        requirementData?.transactionId || "";
+      const transactionName =
+        await getTransactionName(transactionId);
 
-  const requirementData =
-    requirementSnap.exists()
-      ? requirementSnap.data()
-      : null;
-
-  const requirementName =
-    requirementData?.requirementText || "Requirement";
-
-  const transactionId =
-    requirementData?.transactionId || "";
-
-  const transactionName =
-    await getTransactionName(transactionId);
+      await addActivityLog({
+        type: "requirement",
+        action: "deleted",
+        title: requirementName,
+        description: "Requirement deleted",
+        parentName: transactionName,
+        parentId: transactionId,
+        recordId: requirementId
+      });
+    } catch (logErr) {
+      console.warn("Requirement activity log notice:", logErr?.message || logErr);
+    }
+  })();
 
   await deleteDoc(requirementRef);
-
-  /* ACTIVITY LOG (NON-BLOCKING) */
-
-  try {
-    await addActivityLog({
-      type: "requirement",
-      action: "deleted",
-      title: requirementName,
-      description: "Requirement deleted",
-      parentName: transactionName,
-      parentId: transactionId,
-      recordId: requirementId
-    });
-  } catch (logErr) {
-    console.warn("Requirement activity log notice:", logErr?.message || logErr);
-  }
+  logPromise.catch(() => {});
 }

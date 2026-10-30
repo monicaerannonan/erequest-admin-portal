@@ -25,11 +25,6 @@ import {
   deleteGuideline
 } from "./services/guidelineService";
 import { uploadProcedureImage } from "../../services/cloudinaryService";
-import {
-  buildRequirementId,
-  buildProcedureStepId,
-  buildGuidelineId
-} from "../../utils/idUtils";
 import "./AddTransactionPage.css";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -855,186 +850,137 @@ function AddTransactionPage() {
       setSaving(true);
 
       // UPLOAD-FIRST STRATEGY:
-      // Upload all local procedure step images to Cloudinary BEFORE writing
+      // Upload all local procedure step images to Cloudinary in parallel BEFORE writing
       // or updating any records in Firestore so no partial database state is left
       // if an image upload fails.
-      const preparedProcedures = [];
-      for (let i = 0; i < finalProcedures.length; i++) {
-        const step = finalProcedures[i];
-        let resolvedImageUrl = step.remoteImageUrl || "";
-        let wasImageUploaded = false;
+      setSavingStatus("Preparing procedure images...");
+      const preparedProcedures = await Promise.all(
+        finalProcedures.map(async (step) => {
+          let resolvedImageUrl = step.remoteImageUrl || "";
+          let wasImageUploaded = false;
 
-        if (step.imageFile) {
-          setSavingStatus(
-            `Uploading image for procedure step ${step.stepNumber}...`
-          );
-          resolvedImageUrl = await uploadProcedureImage(step.imageFile);
-          wasImageUploaded = true;
+          if (step.imageFile) {
+            resolvedImageUrl = await uploadProcedureImage(step.imageFile);
+            wasImageUploaded = true;
 
-          // Cache uploaded URL in component state so retries do not re-upload
-          setProcedures((prev) =>
-            prev.map((item) =>
-              item.id === step.id
-                ? {
-                    ...item,
-                    remoteImageUrl: resolvedImageUrl,
-                    imagePreview: resolvedImageUrl,
-                    imageFile: null,
-                    isModified: true
-                  }
-                : item
-            )
-          );
-        }
+            // Cache uploaded URL in component state so retries do not re-upload
+            setProcedures((prev) =>
+              prev.map((item) =>
+                item.id === step.id
+                  ? {
+                      ...item,
+                      remoteImageUrl: resolvedImageUrl,
+                      imagePreview: resolvedImageUrl,
+                      imageFile: null,
+                      isModified: true
+                    }
+                  : item
+              )
+            );
+          }
 
-        preparedProcedures.push({
-          ...step,
-          resolvedImageUrl,
-          wasImageUploaded
-        });
-      }
+          return {
+            ...step,
+            resolvedImageUrl,
+            wasImageUploaded
+          };
+        })
+      );
 
       if (isEditMode) {
-        // 1. Update Basic Information
-        setSavingStatus("Updating transaction basic information...");
-        await updateTransaction(
-          transactionId,
-          serviceId,
-          name,
-          description,
-          officeName,
-          officeSchedule
-        );
+        setSavingStatus("Saving transaction updates...");
 
-        // 2. Sync Requirements (delete removed or re-keyed, update modified, add new)
-        const reqIdsToDelete = new Set(deletedReqIds);
-        for (const req of finalRequirements) {
-          if (req.isExisting) {
-            const expectedReqId = buildRequirementId(
-              transactionId,
-              req.requirementText
-            );
-            if (req.id !== expectedReqId) {
-              reqIdsToDelete.add(req.id);
-            }
-          }
-        }
-        for (const removedReqId of reqIdsToDelete) {
-          await deleteRequirement(removedReqId);
-        }
-        for (const req of finalRequirements) {
-          const expectedReqId = buildRequirementId(
+        await Promise.all([
+          // 1. Update Basic Information
+          updateTransaction(
             transactionId,
-            req.requirementText
-          );
-          if (req.isExisting && req.id === expectedReqId) {
-            if (req.isModified) {
-              await updateRequirement(
-                req.id,
-                transactionId,
-                req.requirementText,
-                req.displayOrder
-              );
-            }
-          } else {
-            await addRequirement(
-              transactionId,
-              req.requirementText,
-              req.displayOrder
-            );
-          }
-        }
+            serviceId,
+            name,
+            description,
+            officeName,
+            officeSchedule
+          ),
 
-        // 3. Sync Procedure Steps (delete removed or renumbered, update modified, add new)
-        const procIdsToDelete = new Set(deletedProcIds);
-        for (const step of preparedProcedures) {
-          if (step.isExisting) {
-            const expectedProcId = buildProcedureStepId(
-              transactionId,
-              step.stepNumber
-            );
-            if (step.id !== expectedProcId) {
-              procIdsToDelete.add(step.id);
-            }
-          }
-        }
-        for (const removedProcId of procIdsToDelete) {
-          await deleteProcedureStep(removedProcId);
-        }
-        for (let i = 0; i < preparedProcedures.length; i++) {
-          const step = preparedProcedures[i];
-          const finalImageUrl = step.resolvedImageUrl || "";
+          // 2. Sync Requirements (delete removed items in parallel, update modified in place, add new)
+          Promise.all([
+            ...deletedReqIds.map((id) => deleteRequirement(id)),
+            ...finalRequirements.map((req) => {
+              if (!req.isExisting) {
+                return addRequirement(
+                  transactionId,
+                  req.requirementText,
+                  req.displayOrder
+                );
+              }
+              if (req.isModified) {
+                return updateRequirement(
+                  req.id,
+                  transactionId,
+                  req.requirementText,
+                  req.displayOrder
+                );
+              }
+              return Promise.resolve();
+            })
+          ]),
 
-          const expectedProcId = buildProcedureStepId(
-            transactionId,
-            step.stepNumber
-          );
-          if (step.isExisting && step.id === expectedProcId) {
-            if (step.isModified || step.wasImageUploaded) {
-              await updateProcedureStep(
-                step.id,
-                transactionId,
-                step.stepNumber,
-                step.instruction,
-                finalImageUrl ? step.imageCaption : "",
-                finalImageUrl,
-                step.localImagePath || "",
-                step.websiteName || "",
-                step.websiteUrl || ""
-              );
-            }
-          } else {
-            await addProcedureStep(
-              transactionId,
-              step.stepNumber,
-              step.instruction,
-              finalImageUrl ? step.imageCaption : "",
-              finalImageUrl,
-              step.localImagePath || "",
-              step.websiteName || "",
-              step.websiteUrl || ""
-            );
-          }
-        }
+          // 3. Sync Procedure Steps (delete removed items in parallel, update modified in place, add new)
+          Promise.all([
+            ...deletedProcIds.map((id) => deleteProcedureStep(id)),
+            ...preparedProcedures.map((step) => {
+              const finalImageUrl = step.resolvedImageUrl || "";
+              if (!step.isExisting) {
+                return addProcedureStep(
+                  transactionId,
+                  step.stepNumber,
+                  step.instruction,
+                  finalImageUrl ? step.imageCaption : "",
+                  finalImageUrl,
+                  step.localImagePath || "",
+                  step.websiteName || "",
+                  step.websiteUrl || ""
+                );
+              }
+              if (step.isModified || step.wasImageUploaded) {
+                return updateProcedureStep(
+                  step.id,
+                  transactionId,
+                  step.stepNumber,
+                  step.instruction,
+                  finalImageUrl ? step.imageCaption : "",
+                  finalImageUrl,
+                  step.localImagePath || "",
+                  step.websiteName || "",
+                  step.websiteUrl || ""
+                );
+              }
+              return Promise.resolve();
+            })
+          ]),
 
-        // 4. Sync Guidelines (delete removed or re-keyed, update modified, add new)
-        const guideIdsToDelete = new Set(deletedGuideIds);
-        for (const guide of finalGuidelines) {
-          if (guide.isExisting) {
-            const expectedGuideId = buildGuidelineId(
-              transactionId,
-              guide.guidelineText
-            );
-            if (guide.id !== expectedGuideId) {
-              guideIdsToDelete.add(guide.id);
-            }
-          }
-        }
-        for (const removedGuideId of guideIdsToDelete) {
-          await deleteGuideline(removedGuideId);
-        }
-        for (const guide of finalGuidelines) {
-          const expectedGuideId = buildGuidelineId(
-            transactionId,
-            guide.guidelineText
-          );
-          if (guide.isExisting && guide.id === expectedGuideId) {
-            if (guide.isModified) {
-              await updateGuideline(
-                guide.id,
-                transactionId,
-                guide.guidelineText,
-                guide.displayOrder
-              );
-            }
-          } else {
-            await addGuideline(
-              transactionId,
-              guide.guidelineText,
-              guide.displayOrder
-            );
-          }
-        }
+          // 4. Sync Guidelines (delete removed items in parallel, update modified in place, add new)
+          Promise.all([
+            ...deletedGuideIds.map((id) => deleteGuideline(id)),
+            ...finalGuidelines.map((guide) => {
+              if (!guide.isExisting) {
+                return addGuideline(
+                  transactionId,
+                  guide.guidelineText,
+                  guide.displayOrder
+                );
+              }
+              if (guide.isModified) {
+                return updateGuideline(
+                  guide.id,
+                  transactionId,
+                  guide.guidelineText,
+                  guide.displayOrder
+                );
+              }
+              return Promise.resolve();
+            })
+          ])
+        ]);
 
         navigate("/transactions", {
           replace: true,
@@ -1054,50 +1000,42 @@ function AddTransactionPage() {
           officeSchedule
         );
 
-        if (finalRequirements.length > 0) {
-          setSavingStatus(
-            `Saving ${finalRequirements.length} requirement(s)...`
-          );
-          for (const req of finalRequirements) {
-            await addRequirement(
-              createdTransactionId,
-              req.requirementText,
-              req.displayOrder
-            );
-          }
-        }
-
-        if (preparedProcedures.length > 0) {
-          for (let i = 0; i < preparedProcedures.length; i++) {
-            const step = preparedProcedures[i];
-            const uploadedImageUrl = step.resolvedImageUrl || "";
-            setSavingStatus(
-              `Saving procedure step ${i + 1} of ${preparedProcedures.length}...`
-            );
-
-            await addProcedureStep(
-              createdTransactionId,
-              step.stepNumber,
-              step.instruction,
-              uploadedImageUrl ? step.imageCaption : "",
-              uploadedImageUrl,
-              "",
-              step.websiteName || "",
-              step.websiteUrl || ""
-            );
-          }
-        }
-
-        if (finalGuidelines.length > 0) {
-          setSavingStatus(`Saving ${finalGuidelines.length} guideline(s)...`);
-          for (const guide of finalGuidelines) {
-            await addGuideline(
-              createdTransactionId,
-              guide.guidelineText,
-              guide.displayOrder
-            );
-          }
-        }
+        setSavingStatus("Saving transaction items...");
+        await Promise.all([
+          Promise.all(
+            finalRequirements.map((req) =>
+              addRequirement(
+                createdTransactionId,
+                req.requirementText,
+                req.displayOrder
+              )
+            )
+          ),
+          Promise.all(
+            preparedProcedures.map((step) => {
+              const uploadedImageUrl = step.resolvedImageUrl || "";
+              return addProcedureStep(
+                createdTransactionId,
+                step.stepNumber,
+                step.instruction,
+                uploadedImageUrl ? step.imageCaption : "",
+                uploadedImageUrl,
+                "",
+                step.websiteName || "",
+                step.websiteUrl || ""
+              );
+            })
+          ),
+          Promise.all(
+            finalGuidelines.map((guide) =>
+              addGuideline(
+                createdTransactionId,
+                guide.guidelineText,
+                guide.displayOrder
+              )
+            )
+          )
+        ]);
 
         navigate("/transactions", {
           replace: true,

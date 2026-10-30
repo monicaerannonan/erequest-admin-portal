@@ -328,17 +328,15 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
   }
 
   // 4. Record Activity Log (Non-blocking)
-  try {
-    await addActivityLog({
-      type: "admin_profile",
-      action: "updated",
-      title: `Profile updated for ${cleanName}`,
-      description: `Position: ${cleanPosition} | Department: ${cleanDepartment}`,
-      recordId: currentUid
-    });
-  } catch (logErr) {
+  addActivityLog({
+    type: "admin_profile",
+    action: "updated",
+    title: `Profile updated for ${cleanName}`,
+    description: `Position: ${cleanPosition} | Department: ${cleanDepartment}`,
+    recordId: currentUid
+  }).catch((logErr) => {
     console.warn("Profile activity log notice:", logErr.message);
-  }
+  });
 
   const resolvedProfile = normalizeProfileData(payload, currentUid);
 

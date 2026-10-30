@@ -109,9 +109,15 @@ export async function getActiveServices() {
    Used for Recent Updates
    ========================================= */
 
+const serviceNameCache = new Map();
+
 async function getServiceName(serviceId) {
   if (!serviceId) {
     return "";
+  }
+
+  if (serviceNameCache.has(serviceId)) {
+    return serviceNameCache.get(serviceId);
   }
 
   try {
@@ -127,7 +133,9 @@ async function getServiceName(serviceId) {
       return "";
     }
 
-    return docSnap.data()?.name || "";
+    const name = docSnap.data()?.name || "";
+    serviceNameCache.set(serviceId, name);
+    return name;
   } catch (error) {
     console.error(
       "Failed to get service name:",
@@ -182,22 +190,22 @@ export async function addTransaction(
     `A transaction with the name "${cleanName}" already exists.`
   );
 
-  const serviceName =
-    await getServiceName(cleanServiceId);
-
-  try {
-    await addActivityLog({
-      type: "transaction",
-      action: "added",
-      title: cleanName,
-      description: "New transaction added",
-      parentName: serviceName,
-      parentId: cleanServiceId,
-      recordId: transactionId
-    });
-  } catch (logErr) {
-    console.warn("Transaction activity log notice:", logErr?.message || logErr);
-  }
+  // Non-blocking background activity log
+  getServiceName(cleanServiceId)
+    .then((serviceName) => {
+      addActivityLog({
+        type: "transaction",
+        action: "added",
+        title: cleanName,
+        description: "New transaction added",
+        parentName: serviceName,
+        parentId: cleanServiceId,
+        recordId: transactionId
+      }).catch((logErr) => {
+        console.warn("Transaction activity log notice:", logErr?.message || logErr);
+      });
+    })
+    .catch(() => {});
 
   return transactionId;
 }
@@ -246,22 +254,22 @@ export async function updateTransaction(
     updatedAt: serverTimestamp()
   });
 
-  const serviceName =
-    await getServiceName(cleanServiceId);
-
-  try {
-    await addActivityLog({
-      type: "transaction",
-      action: "updated",
-      title: cleanName,
-      description: "Transaction information updated",
-      parentName: serviceName,
-      parentId: cleanServiceId,
-      recordId: transactionId
-    });
-  } catch (logErr) {
-    console.warn("Transaction activity log notice:", logErr?.message || logErr);
-  }
+  // Non-blocking background activity log
+  getServiceName(cleanServiceId)
+    .then((serviceName) => {
+      addActivityLog({
+        type: "transaction",
+        action: "updated",
+        title: cleanName,
+        description: "Transaction information updated",
+        parentName: serviceName,
+        parentId: cleanServiceId,
+        recordId: transactionId
+      }).catch((logErr) => {
+        console.warn("Transaction activity log notice:", logErr?.message || logErr);
+      });
+    })
+    .catch(() => {});
 }
 
 
@@ -297,31 +305,31 @@ export async function setTransactionActiveStatus(
   const serviceId =
     transactionData?.serviceId || "";
 
-  const serviceName =
-    await getServiceName(serviceId);
-
   await updateDoc(transactionRef, {
     isActive,
     updatedAt: serverTimestamp()
   });
 
-  try {
-    await addActivityLog({
-      type: "transaction",
-      action: isActive
-        ? "activated"
-        : "deactivated",
-      title: transactionName,
-      description: isActive
-        ? "Transaction activated"
-        : "Transaction deactivated",
-      parentName: serviceName,
-      parentId: serviceId,
-      recordId: transactionId
-    });
-  } catch (logErr) {
-    console.warn("Transaction activity log notice:", logErr?.message || logErr);
-  }
+  // Non-blocking background activity log
+  getServiceName(serviceId)
+    .then((serviceName) => {
+      addActivityLog({
+        type: "transaction",
+        action: isActive
+          ? "activated"
+          : "deactivated",
+        title: transactionName,
+        description: isActive
+          ? "Transaction activated"
+          : "Transaction deactivated",
+        parentName: serviceName,
+        parentId: serviceId,
+        recordId: transactionId
+      }).catch((logErr) => {
+        console.warn("Transaction activity log notice:", logErr?.message || logErr);
+      });
+    })
+    .catch(() => {});
 }
 
 
@@ -443,22 +451,22 @@ export async function deleteTransaction(
   const serviceId =
     transactionData?.serviceId || "";
 
-  const serviceName =
-    await getServiceName(serviceId);
-
   await deleteDoc(transactionRef);
 
-  try {
-    await addActivityLog({
-      type: "transaction",
-      action: "deleted",
-      title: transactionName,
-      description: "Transaction deleted",
-      parentName: serviceName,
-      parentId: serviceId,
-      recordId: transactionId
-    });
-  } catch (logErr) {
-    console.warn("Transaction activity log notice:", logErr?.message || logErr);
-  }
+  // Non-blocking background activity log
+  getServiceName(serviceId)
+    .then((serviceName) => {
+      addActivityLog({
+        type: "transaction",
+        action: "deleted",
+        title: transactionName,
+        description: "Transaction deleted",
+        parentName: serviceName,
+        parentId: serviceId,
+        recordId: transactionId
+      }).catch((logErr) => {
+        console.warn("Transaction activity log notice:", logErr?.message || logErr);
+      });
+    })
+    .catch(() => {});
 }
