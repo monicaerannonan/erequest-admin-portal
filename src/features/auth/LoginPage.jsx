@@ -662,10 +662,6 @@ function LoginPage({ initialMode = "login" }) {
                     <span className="req-icon">{passwordCriteria.hasSpecialOnly ? "✓" : "✕"}</span>
                     <span>Special character (! & # * _ only)</span>
                   </li>
-                  <li className={!isSameAsOlder && newPassword.length > 0 ? "req-met" : "req-unmet"}>
-                    <span className="req-icon">{!isSameAsOlder && newPassword.length > 0 ? "✓" : "✕"}</span>
-                    <span>Must not match older password</span>
-                  </li>
                 </ul>
               </div>
             </div>
