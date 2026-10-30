@@ -15,8 +15,8 @@ service cloud.firestore {
     //   - email: string (required, 5-150 chars, valid email format) - Admin email
     //   - phone: string (optional, 0-30 chars) - Contact phone number
     //   - role: string (required, exact value 'admin') - Access role
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
     //
     // Collection: services
     // Document ID: {serviceId} (Normalized slug, e.g., 'registrar')
@@ -24,8 +24,8 @@ service cloud.firestore {
     //   - name: string (required, 1-100 chars) - Department service name
     //   - description: string (required, 0-1000 chars) - Detailed description
     //   - isActive: bool (required) - Active visibility state
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: transactions
     // Document ID: {transactionId} (Normalized slug, e.g., 'getting_prospectus')
@@ -36,8 +36,8 @@ service cloud.firestore {
     //   - officeName: string (optional, 0-200 chars) - Responsible school office
     //   - officeSchedule: string (optional, 0-200 chars) - Operating hours / schedule
     //   - isActive: bool (required) - Active visibility state
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: requirements
     // Document ID: {requirementId} (Hierarchical slug, e.g., 'getting_prospectus_valid_id')
@@ -46,8 +46,8 @@ service cloud.firestore {
     //   - requirementText: string (required, 1-1000 chars) - Requirement instructions
     //   - displayOrder: number (required, >= 1) - Presentation order index
     //   - isActive: bool (required) - Active visibility state
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: procedure_steps
     // Document ID: {stepId} (Hierarchical step slug, e.g., 'getting_prospectus_step_001')
@@ -61,8 +61,8 @@ service cloud.firestore {
     //   - websiteName: string (optional, 0-200 chars) - External reference title
     //   - websiteUrl: string (optional, 0-1000 chars) - External link URL
     //   - isActive: bool (required) - Active visibility state
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: department_guidelines
     // Document ID: {guidelineId} (Hierarchical slug, e.g., 'registrar_guideline_001')
@@ -72,8 +72,8 @@ service cloud.firestore {
     //   - guidelineText: string (required, 1-1000 chars) - Guideline description
     //   - displayOrder: number (required, >= 1) - Presentation order index
     //   - isActive: bool (required) - Active visibility state
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: announcements
     // Document ID: {announcementId} (Auto-generated Firestore ID)
@@ -82,9 +82,9 @@ service cloud.firestore {
     //   - message: string (required, 1-5000 chars) - Announcement body
     //   - displayOrder: number (required) - Presentation sorting priority
     //   - isActive: bool (required) - Active broadcast status
-    //   - datePosted: timestamp | string (optional, max 50 chars, immutable) - Post timestamp
-    //   - createdAt: timestamp | string (optional, max 50 chars, immutable) - Creation timestamp
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Modification timestamp
+    //   - datePosted: timestamp | number | string (optional, max 50 chars if string, immutable) - Post timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //
     // Collection: activity_logs
     // Document ID: {logId} (Auto-generated Firestore ID)
@@ -100,8 +100,8 @@ service cloud.firestore {
     //   - adminEmail: string (optional, 0-150 chars) - Admin user email
     //   - adminUid: string (optional, 0-100 chars) - Admin user UID
     //   - adminName: string (optional, 0-100 chars) - Admin user display name
-    //   - createdAt: timestamp | string (optional, max 50 chars) - Creation timestamp
-    //   - timestamp: timestamp | string (optional, max 50 chars) - Event timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string) - Creation timestamp
+    //   - timestamp: timestamp | number | string (optional, max 50 chars if string) - Event timestamp
     //   (Note: at least one of createdAt or timestamp is required)
     //
     // Collection: device_tokens
@@ -111,7 +111,7 @@ service cloud.firestore {
     //   - token: string (required, 20-4096 chars) - FCM push token
     //   - platform: string (required, exact value 'android') - Device platform
     //   - active: bool (required) - Token active status
-    //   - updatedAt: timestamp | string (required, max 50 chars) - Registration timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Registration timestamp
     //
     // ===============================================================
 
@@ -134,8 +134,12 @@ service cloud.firestore {
       return isAuthenticated() &&
         'email' in request.auth.token &&
         (
-          request.auth.token.email in ['erequesticctadmin@gmail.com', 'erequestadmin@gmail.com'] ||
-          request.auth.token.email.matches('(?i)^(erequesticctadmin|erequestadmin)@gmail\\.com$')
+          request.auth.token.email in [
+            'erequesticctadmin@gmail.com',
+            'erequestadmin@gmail.com',
+            'admin.erequesticct@gmail.com'
+          ] ||
+          request.auth.token.email.matches('(?i)^(erequesticctadmin|erequestadmin|admin\\.erequesticct)@gmail\\.com$')
         );
     }
 
@@ -188,9 +192,9 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
-    // Validate timestamp or backward-compatible ISO string
+    // Validate timestamp, legacy numeric epoch ms, or backward-compatible ISO string
     function isValidTimestampField(val) {
-      return val is timestamp || (val is string && val.size() <= 50);
+      return val is timestamp || val is number || (val is string && val.size() <= 50);
     }
 
     // ===============================================================
