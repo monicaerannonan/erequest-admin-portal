@@ -1,8 +1,6 @@
 import {
   lazy,
-  Suspense,
-  useEffect,
-  useState
+  Suspense
 } from "react";
 
 import {
@@ -11,9 +9,6 @@ import {
   Route,
   Routes
 } from "react-router-dom";
-
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "./firebase/firebaseConfig";
 
 import ProtectedRoute
   from "./features/auth/ProtectedRoute";
@@ -65,23 +60,6 @@ function RouteLoadingFallback() {
   );
 }
 
-function UnknownRouteRedirect() {
-  const [target, setTarget] = useState(null);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setTarget(user ? "/dashboard" : "/login");
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (!target) {
-    return <RouteLoadingFallback />;
-  }
-
-  return <Navigate to={target} replace />;
-}
-
 function App() {
 
   return (
@@ -99,7 +77,12 @@ function App() {
 
         <Route
           path="/"
-          element={<UnknownRouteRedirect />}
+          element={
+            <Navigate
+              to="/login"
+              replace
+            />
+          }
         />
 
 
@@ -252,7 +235,12 @@ function App() {
 
         <Route
           path="*"
-          element={<UnknownRouteRedirect />}
+          element={
+            <Navigate
+              to="/login"
+              replace
+            />
+          }
         />
 
 
