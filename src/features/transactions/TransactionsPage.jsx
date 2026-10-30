@@ -267,8 +267,6 @@ function TransactionsPage() {
 
       setSuccessMessage(statusMsg);
 
-      await loadData();
-
     } catch (error) {
       console.error(
         "Failed to update transaction status:",
@@ -276,7 +274,13 @@ function TransactionsPage() {
       );
 
       /* Rollback optimistic update on failure */
-      await loadData();
+      setTransactions((prev) =>
+        prev.map((item) =>
+          item.id === transaction.id
+            ? { ...item, isActive: !newStatus }
+            : item
+        )
+      );
 
       const errMsg =
         error.message ||
@@ -397,9 +401,9 @@ function TransactionsPage() {
         `${targetName} deleted successfully.`
       );
 
+      /* Optimistically remove from state */
+      setTransactions((prev) => prev.filter((item) => item.id !== targetId));
       setTransactionToDelete(null);
-
-      await loadData();
 
     } catch (error) {
       console.error(

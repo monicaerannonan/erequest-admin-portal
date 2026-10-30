@@ -47,12 +47,14 @@ import {
   setNewAdminPassword,
   verifyAndResetPassword,
   validatePasswordCriteria,
-  ALLOWED_SPECIAL_CHARS
+  ALLOWED_SPECIAL_CHARS,
+  computeOTPHash,
+  getTestLastGeneratedOTP
 } from "../src/features/auth/authService.js";
 
 test("Credentials & Constants: Matches specified admin defaults", () => {
   assert.equal(DEFAULT_ADMIN_EMAIL, "erequesticctadmin@gmail.com");
-  assert.equal(DEFAULT_ADMIN_PASSWORD, "#ICCT4228");
+  assert.equal(DEFAULT_ADMIN_PASSWORD, "#Icct4228");
   assert.equal(EMAILJS_SERVICE_ID, "service_4rwr6df");
   assert.equal(EMAILJS_TEMPLATE_ID, "template_065t767");
   assert.equal(EMAILJS_PUBLIC_KEY, "iC0ESDFLUm8ZrV8q2");
@@ -111,11 +113,13 @@ test("Password Reset Request: Accepts designated admin email and starts session"
   assert.equal(result.otp, undefined);
   assert.equal(result.demoOtp, undefined);
 
-  // OTP is securely stored only in the session/sent to Gmail
+  // Security Rule Verification: Plaintext OTP is NEVER stored in sessionStorage to prevent DevTools inspection exposure
   const rawSession = mockStorage["erequest_admin_otp_session"];
   assert.ok(rawSession, "Session should be saved in sessionStorage");
   const session = JSON.parse(rawSession);
-  assert.match(session.otp, /^[A-Z0-9]{6}$/);
+  assert.equal(session.otp, undefined, "Plaintext OTP must NOT be exposed in sessionStorage");
+  assert.ok(session.otpHash, "Salted cryptographic hash must be present");
+  assert.match(session.otpHash, /^[a-f0-9]{64}$/);
   assert.equal(session.email, "erequesticctadmin@gmail.com");
   assert.ok(session.expiresAt > Date.now());
 });
@@ -168,9 +172,13 @@ test("EmailJS Template Variables: Passes {{passcode}} and {{time}} exactly as sp
     assert.ok(params.time, "{{time}} variable must be defined");
     assert.match(params.time, /\d{1,2}:\d{2}\s?(?:AM|PM)/i);
 
-    // Session storage OTP matches the sent passcode
+    // Session storage OTP hash matches the sent passcode
     const session = JSON.parse(mockStorage["erequest_admin_otp_session"]);
-    assert.equal(session.otp, params.passcode);
+    assert.equal(session.otp, undefined, "Plaintext OTP must not be in session");
+    assert.equal(
+      session.otpHash,
+      computeOTPHash(session.salt, "erequesticctadmin@gmail.com", params.passcode)
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -189,7 +197,7 @@ test("Password Reset Verification: Rejects invalid or mismatched entries", async
   };
 
   await sendPasswordResetOTP("erequesticctadmin@gmail.com");
-  const validOtp = JSON.parse(mockStorage["erequest_admin_otp_session"]).otp;
+  const validOtp = getTestLastGeneratedOTP();
 
   // 1. Wrong OTP code
   await assert.rejects(
@@ -332,11 +340,11 @@ test("Password Reset Execution: Updates active password and invalidates OTP", as
   };
 
   // Initial password
-  assert.equal(getActiveAdminPassword(), "#ICCT4228");
+  assert.equal(getActiveAdminPassword(), "#Icct4228");
 
   // Send OTP
   await sendPasswordResetOTP("erequesticctadmin@gmail.com");
-  const validOtp = JSON.parse(mockSession["erequest_admin_otp_session"]).otp;
+  const validOtp = getTestLastGeneratedOTP();
 
   // Verify and reset with matching passwords
   const result = await verifyAndResetPassword(
@@ -363,8 +371,8 @@ test("Password Reset Execution: Updates active password and invalidates OTP", as
   );
 
   // Clean up
-  setActiveAdminPassword("#ICCT4228");
-  assert.equal(getActiveAdminPassword(), "#ICCT4228");
+  setActiveAdminPassword("#Icct4228");
+  assert.equal(getActiveAdminPassword(), "#Icct4228");
 });
 
 test("Two-Page Separation: Step 1 (OTP verification) and Step 2 (Set password) operate sequentially", async () => {
@@ -391,7 +399,7 @@ test("Two-Page Separation: Step 1 (OTP verification) and Step 2 (Set password) o
 
   // Step 0: Request OTP
   await sendPasswordResetOTP("erequesticctadmin@gmail.com");
-  const otpCode = JSON.parse(mockSession["erequest_admin_otp_session"]).otp;
+  const otpCode = getTestLastGeneratedOTP();
   assert.ok(otpCode);
 
   // Security check: Calling Step 2 (setNewAdminPassword) before Step 1 (verifyPasswordResetOTP) must fail
@@ -403,7 +411,7 @@ test("Two-Page Separation: Step 1 (OTP verification) and Step 2 (Set password) o
         "NewSecretPassword99!"
       );
     },
-    /Please verify your OTP code before setting a new password/i
+    /Security validation failed|Please verify your OTP code/i
   );
 
   // Step 1: Verify OTP on dedicated OTP screen
@@ -424,7 +432,7 @@ test("Two-Page Separation: Step 1 (OTP verification) and Step 2 (Set password) o
   assert.equal(getActiveAdminPassword(), "#NewAdminPassPhase2");
 
   // Reset to default
-  setActiveAdminPassword("#ICCT4228");
+  setActiveAdminPassword("#Icct4228");
 });
 
 test("Route Mode Resolution: Direct navigation correctly maps to forgot_password mode", () => {
@@ -529,3 +537,85 @@ test("Password Criteria Live Evaluator: Correctly evaluates green/red states and
   assert.equal(fullyValid.hasSpecialOnly, true);
   assert.equal(fullyValid.isValid, true);
 });
+
+test("Security Defense: DevTools Console tampering (verified: true bypass) is blocked", async () => {
+  const mockStorage = {};
+  globalThis.sessionStorage = {
+    getItem: (k) => mockStorage[k] || null,
+    setItem: (k, v) => { mockStorage[k] = String(v); },
+    removeItem: (k) => { delete mockStorage[k]; }
+  };
+
+  // Attacker injects forged session directly into sessionStorage via Console
+  mockStorage["erequest_admin_otp_session"] = JSON.stringify({
+    email: "erequesticctadmin@gmail.com",
+    otp: "123456",
+    expiresAt: Date.now() + 600000,
+    verified: true
+  });
+
+  // 1. Forged verified boolean without valid token is blocked
+  await assert.rejects(
+    async () => {
+      await setNewAdminPassword(
+        "erequesticctadmin@gmail.com",
+        "#NewHackerPass123",
+        "#NewHackerPass123"
+      );
+    },
+    /Please verify your OTP code before setting a new password/i
+  );
+
+  // 2. Forged verification token is blocked with security validation failure
+  mockStorage["erequest_admin_otp_session"] = JSON.stringify({
+    email: "erequesticctadmin@gmail.com",
+    salt: "random_salt",
+    otpHash: "forged_hash",
+    verifiedToken: "forged_token_123",
+    expiresAt: Date.now() + 600000,
+    verified: true
+  });
+
+  await assert.rejects(
+    async () => {
+      await setNewAdminPassword(
+        "erequesticctadmin@gmail.com",
+        "#NewHackerPass123",
+        "#NewHackerPass123"
+      );
+    },
+    /Security validation failed/i
+  );
+});
+
+test("Security Defense: Exceeding max OTP attempts (5/5) revokes the session", async () => {
+  const mockStorage = {};
+  globalThis.sessionStorage = {
+    getItem: (k) => mockStorage[k] || null,
+    setItem: (k, v) => { mockStorage[k] = String(v); },
+    removeItem: (k) => { delete mockStorage[k]; }
+  };
+
+  await sendPasswordResetOTP("erequesticctadmin@gmail.com");
+
+  // 4 failed attempts show remaining countdown
+  for (let i = 0; i < 4; i++) {
+    await assert.rejects(
+      async () => {
+        await verifyPasswordResetOTP("erequesticctadmin@gmail.com", "BAD000");
+      },
+      /Invalid verification code.*attempt.*remaining/i
+    );
+  }
+
+  // 5th failed attempt revokes the session completely
+  await assert.rejects(
+    async () => {
+      await verifyPasswordResetOTP("erequesticctadmin@gmail.com", "BAD000");
+    },
+    /Too many failed attempts/i
+  );
+
+  assert.equal(mockStorage["erequest_admin_otp_session"], undefined);
+});
+

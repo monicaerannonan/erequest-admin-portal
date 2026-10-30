@@ -1,5 +1,4 @@
 import {
-  lazy,
   Suspense
 } from "react";
 
@@ -19,29 +18,29 @@ import AdminLayout
 import LoginPage
   from "./features/auth/LoginPage";
 
-const DashboardPage =
-  lazy(() => import("./features/dashboard/DashboardPage"));
+import DashboardPage
+  from "./features/dashboard/DashboardPage";
 
-const ServicesPage =
-  lazy(() => import("./features/services/ServicesPage"));
+import ServicesPage
+  from "./features/services/ServicesPage";
 
-const AddServicePage =
-  lazy(() => import("./features/services/AddServicePage"));
+import AddServicePage
+  from "./features/services/AddServicePage";
 
-const TransactionsPage =
-  lazy(() => import("./features/transactions/TransactionsPage"));
+import TransactionsPage
+  from "./features/transactions/TransactionsPage";
 
-const AddTransactionPage =
-  lazy(() => import("./features/transactions/AddTransactionPage"));
+import AddTransactionPage
+  from "./features/transactions/AddTransactionPage";
 
-const AnnouncementsPage =
-  lazy(() => import("./features/announcements/AnnouncementsPage"));
+import AnnouncementsPage
+  from "./features/announcements/AnnouncementsPage";
 
-const AddAnnouncementPage =
-  lazy(() => import("./features/announcements/AddAnnouncementPage"));
+import AddAnnouncementPage
+  from "./features/announcements/AddAnnouncementPage";
 
-const AdminProfilePage =
-  lazy(() => import("./features/profile/AdminProfilePage"));
+import AdminProfilePage
+  from "./features/profile/AdminProfilePage";
 
 function RouteLoadingFallback() {
   return (

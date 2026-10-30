@@ -156,6 +156,15 @@ function AnnouncementsPage() {
       setErrorMessage("");
       setSuccessMessage("");
 
+      /* Optimistic UI update */
+      setAnnouncements((prev) =>
+        prev.map((item) =>
+          item.id === announcement.id
+            ? { ...item, isActive: newStatus }
+            : item
+        )
+      );
+
       await setAnnouncementActiveStatus(
         announcement.id,
         newStatus
@@ -167,12 +176,19 @@ function AnnouncementsPage() {
           : "Announcement deactivated successfully."
       );
 
-      await loadAnnouncements();
-
     } catch (error) {
       console.error(
         "Failed to update announcement status:",
         error
+      );
+
+      /* Rollback optimistic update */
+      setAnnouncements((prev) =>
+        prev.map((item) =>
+          item.id === announcement.id
+            ? { ...item, isActive: !newStatus }
+            : item
+        )
       );
 
       setErrorMessage(
@@ -224,25 +240,29 @@ function AnnouncementsPage() {
         return;
       }
 
+      const targetId = announcementToDelete.id;
+
       try {
         setDeletingId(
-          announcementToDelete.id
+          targetId
         );
 
         setErrorMessage("");
         setSuccessMessage("");
 
         await deleteAnnouncement(
-          announcementToDelete.id
+          targetId
         );
 
         setSuccessMessage(
           "Announcement deleted successfully."
         );
 
+        /* Optimistically remove from state */
+        setAnnouncements((prev) =>
+          prev.filter((item) => item.id !== targetId)
+        );
         setAnnouncementToDelete(null);
-
-        await loadAnnouncements();
 
       } catch (error) {
         console.error(
@@ -344,6 +364,30 @@ function AnnouncementsPage() {
 
               <div className="announcement-state-message">
                 Loading announcements...
+              </div>
+
+            ) : errorMessage && announcements.length === 0 ? (
+
+              <div className="announcement-state-message" style={{ textAlign: "center", padding: "24px 16px" }}>
+                <p style={{ color: "#d32f2f", marginBottom: "16px", fontWeight: "500" }}>
+                  {errorMessage}
+                </p>
+                <button
+                  type="button"
+                  onClick={loadAnnouncements}
+                  style={{
+                    padding: "8px 18px",
+                    background: "#1976d2",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "600"
+                  }}
+                >
+                  Retry Loading
+                </button>
               </div>
 
             ) : announcements.length === 0 ? (

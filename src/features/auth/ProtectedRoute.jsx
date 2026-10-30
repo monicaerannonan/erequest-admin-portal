@@ -26,10 +26,44 @@ import {
 import { AdminProfileProvider } from "../profile/AdminProfileProvider";
 
 
+function getStoredLocalAuth() {
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "::1");
+
+  if (!isLocalhost) return null;
+
+  try {
+    const raw =
+      typeof sessionStorage !== "undefined" &&
+      sessionStorage.getItem("erequest_admin_auth_session");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.authenticated) {
+        return { email: parsed.email, uid: parsed.uid };
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+
 function ProtectedRoute() {
 
-  const [loading, setLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const effectiveUser = auth.currentUser || getStoredLocalAuth();
+  const currentEmail = (effectiveUser?.email || "").toLowerCase();
+  const initialIsDesignated = Boolean(
+    effectiveUser &&
+      (currentEmail === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+        AUTHORIZED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === currentEmail))
+  );
+
+  const [loading, setLoading] = useState(!initialIsDesignated);
+  const [isAuthorized, setIsAuthorized] = useState(initialIsDesignated);
 
 
   useEffect(() => {
@@ -45,8 +79,9 @@ function ProtectedRoute() {
           return;
         }
 
+        const activeUser = user || getStoredLocalAuth();
 
-        if (!user) {
+        if (!activeUser) {
 
           setIsAuthorized(false);
           setLoading(false);
@@ -54,7 +89,7 @@ function ProtectedRoute() {
           return;
         }
 
-        const userEmail = (user.email || "").toLowerCase();
+        const userEmail = (activeUser.email || "").toLowerCase();
         const isDesignatedAdmin =
           userEmail === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
           AUTHORIZED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === userEmail);
@@ -165,7 +200,7 @@ function ProtectedRoute() {
 
 
   return (
-    <AdminProfileProvider userId={auth.currentUser?.uid}>
+    <AdminProfileProvider userId={auth.currentUser?.uid || effectiveUser?.uid}>
       <Outlet />
     </AdminProfileProvider>
   );

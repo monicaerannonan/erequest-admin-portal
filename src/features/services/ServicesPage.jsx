@@ -147,6 +147,13 @@ function ServicesPage() {
       setErrorMessage("");
       setSuccessMessage("");
 
+      /* Optimistic UI update */
+      setServices((prev) =>
+        prev.map((item) =>
+          item.id === service.id ? { ...item, isActive: newStatus } : item
+        )
+      );
+
       await setServiceActiveStatus(
         service.id,
         newStatus
@@ -158,12 +165,17 @@ function ServicesPage() {
           : "Service deactivated successfully."
       );
 
-      await loadServices();
-
     } catch (error) {
       console.error(
         "Failed to update service status:",
         error
+      );
+
+      /* Revert optimistic update */
+      setServices((prev) =>
+        prev.map((item) =>
+          item.id === service.id ? { ...item, isActive: !newStatus } : item
+        )
       );
 
       setErrorMessage(
@@ -238,6 +250,8 @@ function ServicesPage() {
       return;
     }
 
+    const deletedId = serviceToDelete.id;
+
     try {
       setDeleting(true);
 
@@ -245,16 +259,16 @@ function ServicesPage() {
       setSuccessMessage("");
 
       await deleteService(
-        serviceToDelete.id
+        deletedId
       );
 
       setSuccessMessage(
         "Service deleted successfully."
       );
 
+      /* Optimistic deletion update */
+      setServices((prev) => prev.filter((item) => item.id !== deletedId));
       setServiceToDelete(null);
-
-      await loadServices();
 
     } catch (error) {
       console.error(
