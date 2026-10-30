@@ -138,6 +138,31 @@ export function setActiveAdminPassword(newPassword) {
 }
 
 /**
+ * Checks if the proposed password matches the current or default admin password.
+ * Passwords cannot be identical to the older/current password during password reset.
+ */
+export function isSameAsOlderPassword(newPassword, olderPassword = null) {
+  if (!newPassword || typeof newPassword !== "string") {
+    return false;
+  }
+  const currentPassword = olderPassword || getActiveAdminPassword();
+  if (!currentPassword) {
+    return false;
+  }
+  if (newPassword === currentPassword) {
+    return true;
+  }
+  // If current password is default admin password, prevent casing variations like #ICCT4228 vs #Icct4228
+  if (
+    currentPassword.toLowerCase() === DEFAULT_ADMIN_PASSWORD.toLowerCase() &&
+    newPassword.toLowerCase() === DEFAULT_ADMIN_PASSWORD.toLowerCase()
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Cryptographic SHA-256 helper (pure JS, synchronous, portable across Browser & Node.js).
  */
 export function sha256Sync(ascii = "") {
@@ -602,6 +627,10 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
 
   if (!/[!&#*_]/.test(newPassword)) {
     throw new Error("New password must include at least one special character (!, &, #, *, _).");
+  }
+
+  if (isSameAsOlderPassword(newPassword)) {
+    throw new Error("New password cannot be the same as your older password. Please choose a different password to proceed.");
   }
 
   if (newPassword !== confirmPassword) {

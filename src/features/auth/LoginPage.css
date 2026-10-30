@@ -546,7 +546,8 @@
 }
 
 /* Space warning banner */
-.space-warning-banner {
+.space-warning-banner,
+.same-password-warning-banner {
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 8px;
@@ -561,7 +562,8 @@
   animation: fadeIn 0.2s ease-in;
 }
 
-.space-warning-icon {
+.space-warning-icon,
+.same-password-warning-icon {
   font-size: 14px;
 }
 

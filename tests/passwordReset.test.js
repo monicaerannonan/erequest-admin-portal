@@ -47,6 +47,7 @@ import {
   setNewAdminPassword,
   verifyAndResetPassword,
   validatePasswordCriteria,
+  isSameAsOlderPassword,
   ALLOWED_SPECIAL_CHARS,
   computeOTPHash,
   getTestLastGeneratedOTP
@@ -618,4 +619,98 @@ test("Security Defense: Exceeding max OTP attempts (5/5) revokes the session", a
 
   assert.equal(mockStorage["erequest_admin_otp_session"], undefined);
 });
+
+test("Older Password Detection: isSameAsOlderPassword correctly flags identical passwords", () => {
+  // 1. Initial active password defaults to #Icct4228
+  setActiveAdminPassword("#Icct4228");
+  assert.equal(isSameAsOlderPassword("#Icct4228"), true);
+  // Default casing variant
+  assert.equal(isSameAsOlderPassword("#ICCT4228"), true);
+
+  // 2. Distinct new password is permitted (returns false)
+  assert.equal(isSameAsOlderPassword("#BrandNewPass2026"), false);
+  assert.equal(isSameAsOlderPassword("SomethingElse123!"), false);
+
+  // 3. Falsy and invalid inputs
+  assert.equal(isSameAsOlderPassword(""), false);
+  assert.equal(isSameAsOlderPassword(null), false);
+  assert.equal(isSameAsOlderPassword(undefined), false);
+
+  // 4. Custom older password parameter
+  assert.equal(isSameAsOlderPassword("#MySecretPass99", "#MySecretPass99"), true);
+  assert.equal(isSameAsOlderPassword("#MySecretPass99", "#DifferentOldPass1"), false);
+
+  // 5. When active password changes, the new active password becomes the older password
+  setActiveAdminPassword("#NewActivePass777!");
+  assert.equal(isSameAsOlderPassword("#NewActivePass777!"), true);
+  assert.equal(isSameAsOlderPassword("#AnotherNewPass888!"), false);
+
+  // Clean up
+  setActiveAdminPassword("#Icct4228");
+});
+
+test("Security Defense: Password Reset strictly rejects same older password before proceeding", async () => {
+  const mockSession = {};
+  const mockLocal = {};
+  globalThis.sessionStorage = {
+    getItem: (k) => mockSession[k] || null,
+    setItem: (k, v) => { mockSession[k] = String(v); },
+    removeItem: (k) => { delete mockSession[k]; }
+  };
+  globalThis.localStorage = {
+    getItem: (k) => mockLocal[k] || null,
+    setItem: (k, v) => { mockLocal[k] = String(v); },
+    removeItem: (k) => { delete mockLocal[k]; }
+  };
+
+  setActiveAdminPassword("#Icct4228");
+
+  // Step 0: Request OTP
+  await sendPasswordResetOTP("erequesticctadmin@gmail.com");
+  const otpCode = getTestLastGeneratedOTP();
+
+  // Step 1: Verify OTP
+  await verifyPasswordResetOTP("erequesticctadmin@gmail.com", otpCode);
+
+  // Step 2: Attempting to reset using the existing old password (#Icct4228) must be rejected
+  await assert.rejects(
+    async () => {
+      await setNewAdminPassword(
+        "erequesticctadmin@gmail.com",
+        "#Icct4228",
+        "#Icct4228"
+      );
+    },
+    /cannot be the same as your older password/i
+  );
+
+  // Step 2b: Proceeding with a distinct valid new password succeeds
+  const updateResult = await setNewAdminPassword(
+    "erequesticctadmin@gmail.com",
+    "#DifferentUniquePass2026",
+    "#DifferentUniquePass2026"
+  );
+  assert.equal(updateResult.success, true);
+  assert.equal(getActiveAdminPassword(), "#DifferentUniquePass2026");
+
+  // Step 2c: If another reset occurs, #DifferentUniquePass2026 is now the old password and must be rejected
+  await sendPasswordResetOTP("erequesticctadmin@gmail.com");
+  const nextOtp = getTestLastGeneratedOTP();
+  await verifyPasswordResetOTP("erequesticctadmin@gmail.com", nextOtp);
+
+  await assert.rejects(
+    async () => {
+      await setNewAdminPassword(
+        "erequesticctadmin@gmail.com",
+        "#DifferentUniquePass2026",
+        "#DifferentUniquePass2026"
+      );
+    },
+    /cannot be the same as your older password/i
+  );
+
+  // Clean up
+  setActiveAdminPassword("#Icct4228");
+});
+
 

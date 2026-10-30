@@ -9,6 +9,7 @@ import {
   setNewAdminPassword,
   logoutAdmin,
   validatePasswordCriteria,
+  isSameAsOlderPassword,
   DEFAULT_ADMIN_EMAIL
 } from "./authService";
 import "./LoginPage.css";
@@ -62,6 +63,7 @@ function LoginPage({ initialMode = "login" }) {
 
   // Live password complexity & matching evaluation
   const passwordCriteria = validatePasswordCriteria(newPassword);
+  const isSameAsOlder = isSameAsOlderPassword(newPassword);
   const passwordsMatch = confirmPassword.length > 0 && newPassword === confirmPassword;
 
   // Synchronize mode when browser Back / Forward buttons or hash changes occur
@@ -302,6 +304,11 @@ function LoginPage({ initialMode = "login" }) {
 
     if (!/[!&#*_]/.test(newPassword)) {
       setErrorMessage("New password must contain at least one special character (!, &, #, *, _).");
+      return;
+    }
+
+    if (isSameAsOlderPassword(newPassword)) {
+      setErrorMessage("New password cannot be the same as your older password. Please choose a different password to proceed.");
       return;
     }
 
@@ -621,6 +628,14 @@ function LoginPage({ initialMode = "login" }) {
                 </div>
               )}
 
+              {/* Same as Older Password Warning Box */}
+              {isSameAsOlder && (
+                <div className="same-password-warning-banner" role="alert">
+                  <span className="same-password-warning-icon">⚠</span>
+                  <span>New password cannot be the same as your older password. Please choose a different password to proceed.</span>
+                </div>
+              )}
+
               {/* Dynamic Live Password Requirements Checklist */}
               <div className="password-requirements-card">
                 <div className="password-requirements-title">
@@ -646,6 +661,10 @@ function LoginPage({ initialMode = "login" }) {
                   <li className={passwordCriteria.hasSpecialOnly ? "req-met" : "req-unmet"}>
                     <span className="req-icon">{passwordCriteria.hasSpecialOnly ? "✓" : "✕"}</span>
                     <span>Special character (! & # * _ only)</span>
+                  </li>
+                  <li className={!isSameAsOlder && newPassword.length > 0 ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{!isSameAsOlder && newPassword.length > 0 ? "✓" : "✕"}</span>
+                    <span>Must not match older password</span>
                   </li>
                 </ul>
               </div>
@@ -689,7 +708,13 @@ function LoginPage({ initialMode = "login" }) {
             <button
               type="submit"
               className="login-button"
-              disabled={loading || newPassword.includes(" ") || !passwordCriteria.isValid || !passwordsMatch}
+              disabled={
+                loading ||
+                newPassword.includes(" ") ||
+                !passwordCriteria.isValid ||
+                isSameAsOlder ||
+                !passwordsMatch
+              }
             >
               {loading ? "Updating Password..." : "Confirm & Update Password"}
             </button>
