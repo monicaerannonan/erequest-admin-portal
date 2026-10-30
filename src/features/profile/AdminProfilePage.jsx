@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  PRESET_DEPARTMENTS,
-  PRESET_POSITIONS,
   getInitials
 } from "./profileService";
 import { useAdminProfileSync } from "./AdminProfileContext";
@@ -334,26 +332,6 @@ function AdminProfilePage() {
                   required
                 />
               </div>
-
-              {/* Quick suggestions */}
-              <div className="admin-profile-chips-group">
-                <span className="admin-profile-chips-label">Suggestions:</span>
-                <div className="admin-profile-chips">
-                  {PRESET_POSITIONS.slice(0, 4).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      className={`admin-profile-chip ${position === pos ? "active" : ""}`}
-                      onClick={() => {
-                        setPosition(pos);
-                        setIsDirty(true);
-                      }}
-                    >
-                      {pos}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* DEPARTMENT */}
@@ -373,26 +351,6 @@ function AdminProfilePage() {
                   placeholder="e.g. Registrar's Office, Admissions Office"
                   required
                 />
-              </div>
-
-              {/* Quick suggestions */}
-              <div className="admin-profile-chips-group">
-                <span className="admin-profile-chips-label">Suggestions:</span>
-                <div className="admin-profile-chips">
-                  {PRESET_DEPARTMENTS.slice(0, 4).map((dept) => (
-                    <button
-                      key={dept}
-                      type="button"
-                      className={`admin-profile-chip ${department === dept ? "active" : ""}`}
-                      onClick={() => {
-                        setDepartment(dept);
-                        setIsDirty(true);
-                      }}
-                    >
-                      {dept}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
 
@@ -544,14 +502,9 @@ function AdminProfilePage() {
           <div className="admin-profile-card admin-profile-security-card">
             <div className="admin-profile-card-header">
               <h3>Security & Password</h3>
-              <p>Account authentication is backed by Firebase Auth and EmailJS OTP.</p>
             </div>
 
             <div className="admin-profile-security-body">
-              <p className="admin-profile-security-note">
-                Need to update your password? You can initiate an OTP-verified password reset delivered to your administrator Gmail.
-              </p>
-
               <button
                 type="button"
                 className="admin-profile-security-link"

@@ -22,6 +22,7 @@ import {
   buildServiceId,
   createDocumentIfAbsent
 } from "../../utils/idUtils";
+import { withTimeout } from "../../utils/asyncUtils";
 
 
 const SERVICES_COLLECTION =
@@ -41,8 +42,10 @@ export async function getAllServices() {
 
 
   const snapshot =
-    await getDocs(
-      servicesRef
+    await withTimeout(
+      getDocs(servicesRef),
+      10000,
+      "Fetching services"
     );
 
 
@@ -61,8 +64,8 @@ export async function getAllServices() {
 
   services.sort(
     (a, b) =>
-      (a.name || "").localeCompare(
-        b.name || ""
+      String(a?.name ?? "").localeCompare(
+        String(b?.name ?? "")
       )
   );
 

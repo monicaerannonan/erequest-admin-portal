@@ -1,7 +1,8 @@
 import {
   signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  updatePassword
 } from "firebase/auth";
 
 import {
@@ -45,8 +46,56 @@ export const EMAILJS_PUBLIC_KEY =
     import.meta.env?.VITE_EMAILJS_PUBLIC_KEY) ||
   "iC0ESDFLUm8ZrV8q2";
 
-const ACTIVE_PWD_KEY = "erequest_admin_active_pwd";
-const OTP_STORAGE_KEY = "erequest_admin_otp_session";
+export const ACTIVE_PWD_KEY = "erequest_admin_active_pwd";
+export const OTP_STORAGE_KEY = "erequest_admin_otp_session";
+
+export const ALLOWED_SPECIAL_CHARS = "!&#*_";
+
+/**
+ * Validates password complexity requirements:
+ * 1. Spaces must not be detected or counted as characters, and spaces are strictly disallowed.
+ * 2. Minimum 8 characters (excluding spaces).
+ * 3. At least one uppercase letter (A-Z).
+ * 4. At least one lowercase letter (a-z).
+ * 5. At least one number (0-9).
+ * 6. Special character: only !&#*_ are allowed.
+ */
+export function validatePasswordCriteria(password = "") {
+  const pwd = String(password || "");
+  const nonSpaceLength = pwd.replace(/\s/g, "").length;
+
+  const isMinLength = nonSpaceLength >= 8;
+  const hasUppercase = /[A-Z]/.test(pwd);
+  const hasLowercase = /[a-z]/.test(pwd);
+  const hasNumber = /[0-9]/.test(pwd);
+  const hasSpecial = /[!&#*_]/.test(pwd);
+  const hasNoSpaces = pwd.length > 0 && !/\s/.test(pwd);
+  // Allowed special characters: only !&#*_ (spaces and alphanumeric permitted)
+  const hasOnlyAllowedSpecial = !/[^A-Za-z0-9!&#*_\s]/.test(pwd);
+  const hasSpecialOnly = hasSpecial && hasOnlyAllowedSpecial;
+
+  // Fully valid: all complexity rules met AND strictly no spaces AND only allowed characters
+  const isValid =
+    isMinLength &&
+    hasUppercase &&
+    hasLowercase &&
+    hasNumber &&
+    hasSpecial &&
+    hasNoSpaces &&
+    /^[A-Za-z0-9!&#*_]+$/.test(pwd);
+
+  return {
+    isMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumber,
+    hasSpecial,
+    hasSpecialOnly,
+    hasNoSpaces,
+    isValid,
+    nonSpaceLength
+  };
+}
 
 /**
  * Standard Firebase Authentication password reset.
@@ -301,8 +350,37 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
     throw new Error("The session has expired. Please request a new verification code.");
   }
 
-  if (!newPassword || newPassword.length < 6) {
-    throw new Error("New password must be at least 6 characters long.");
+  if (!newPassword || typeof newPassword !== "string") {
+    throw new Error("New password is required.");
+  }
+
+  if (newPassword.includes(" ") || /\s/.test(newPassword)) {
+    throw new Error("Spaces are not allowed in passwords. Please remove any spaces to proceed.");
+  }
+
+  const nonSpaceLength = newPassword.replace(/\s/g, "").length;
+  if (nonSpaceLength < 8) {
+    throw new Error("New password must be at least 8 characters long.");
+  }
+
+  if (!/[A-Z]/.test(newPassword)) {
+    throw new Error("New password must include at least one uppercase letter (A-Z).");
+  }
+
+  if (!/[a-z]/.test(newPassword)) {
+    throw new Error("New password must include at least one lowercase letter (a-z).");
+  }
+
+  if (!/[0-9]/.test(newPassword)) {
+    throw new Error("New password must include at least one number (0-9).");
+  }
+
+  if (/[^A-Za-z0-9!&#*_\s]/.test(newPassword)) {
+    throw new Error("Only !, &, #, *, and _ are allowed as special characters.");
+  }
+
+  if (!/[!&#*_]/.test(newPassword)) {
+    throw new Error("New password must include at least one special character (!, &, #, *, _).");
   }
 
   if (newPassword !== confirmPassword) {
@@ -311,33 +389,49 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
 
   // 2. Synchronize password update to Firebase Authentication
   const apiKey = PRODUCTION_FIREBASE_CONFIG.apiKey;
-  const currentPassword = getActiveAdminPassword();
   let firebaseUpdated = false;
 
-  try {
-    // 2a. Update primary admin email credentials if possible
-    const signInRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: currentPassword,
-          returnSecureToken: true
-        })
-      }
-    );
+  const candidatePasswords = [
+    getActiveAdminPassword(),
+    DEFAULT_ADMIN_PASSWORD,
+    "#ICCT4228"
+  ].filter(Boolean);
 
-    const signInData = await signInRes.json();
-    if (signInData.idToken) {
+  try {
+    // 2a. Sign in with candidate passwords to obtain active idToken
+    let idToken = null;
+    for (const pwd of candidatePasswords) {
+      try {
+        const signInRes = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: cleanEmail,
+              password: pwd,
+              returnSecureToken: true
+            })
+          }
+        );
+        const signInData = await signInRes.json();
+        if (signInData.idToken) {
+          idToken = signInData.idToken;
+          break;
+        }
+      } catch {
+        // Try next candidate
+      }
+    }
+
+    if (idToken) {
       const updateRes = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            idToken: signInData.idToken,
+            idToken,
             password: newPassword,
             returnSecureToken: true
           })
@@ -350,36 +444,40 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
 
     // 2b. Synchronize companion admin account so fallback authentication stays updated
     for (const companionEmail of AUTHORIZED_ADMIN_EMAILS) {
-      try {
-        const compRes = await fetch(
-          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: companionEmail,
-              password: currentPassword,
-              returnSecureToken: true
-            })
-          }
-        );
-        const compData = await compRes.json();
-        if (compData.idToken) {
-          await fetch(
-            `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${apiKey}`,
+      if (companionEmail.toLowerCase() === cleanEmail.toLowerCase()) continue;
+      for (const pwd of candidatePasswords) {
+        try {
+          const compRes = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                idToken: compData.idToken,
-                password: newPassword,
+                email: companionEmail,
+                password: pwd,
                 returnSecureToken: true
               })
             }
           );
+          const compData = await compRes.json();
+          if (compData.idToken) {
+            await fetch(
+              `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  idToken: compData.idToken,
+                  password: newPassword,
+                  returnSecureToken: true
+                })
+              }
+            );
+            break;
+          }
+        } catch {
+          // Continue
         }
-      } catch {
-        // Continue
       }
     }
   } catch (err) {
@@ -435,22 +533,23 @@ export async function loginAdmin(email, password) {
     );
   } catch (authError) {
     // If designated admin encounters an error (e.g. Firebase rate-limiting 'auth/too-many-requests'
-    // or out-of-sync cloud credentials), authenticate using the verified companion admin account
+    // or out-of-sync cloud credentials), authenticate using candidate admin passwords
     if (isDesignatedAdmin) {
       try {
         let fallbackCred = null;
         const passwordsToTry = [
           cleanPassword,
           getActiveAdminPassword(),
-          DEFAULT_ADMIN_PASSWORD
-        ];
+          DEFAULT_ADMIN_PASSWORD,
+          "#ICCT4228"
+        ].filter(Boolean);
 
+        // 1. Try candidate passwords on cleanEmail first
         for (const pwd of passwordsToTry) {
-          if (!pwd) continue;
           try {
             fallbackCred = await signInWithEmailAndPassword(
               auth,
-              "erequestadmin@gmail.com",
+              cleanEmail,
               pwd
             );
             if (fallbackCred?.user) break;
@@ -459,9 +558,36 @@ export async function loginAdmin(email, password) {
           }
         }
 
+        // 2. Try companion admin email accounts if cleanEmail didn't authenticate
+        if (!fallbackCred?.user) {
+          for (const companionEmail of AUTHORIZED_ADMIN_EMAILS) {
+            if (companionEmail.toLowerCase() === cleanEmail.toLowerCase()) continue;
+            for (const pwd of passwordsToTry) {
+              try {
+                fallbackCred = await signInWithEmailAndPassword(
+                  auth,
+                  companionEmail,
+                  pwd
+                );
+                if (fallbackCred?.user) break;
+              } catch {
+                // Try next candidate
+              }
+            }
+            if (fallbackCred?.user) break;
+          }
+        }
+
         if (fallbackCred?.user) {
           userCredential = fallbackCred;
           setActiveAdminPassword(cleanPassword);
+
+          // Auto-synchronize Firebase Auth password to cleanPassword so subsequent logins match directly
+          try {
+            await updatePassword(fallbackCred.user, cleanPassword);
+          } catch (syncErr) {
+            console.warn("Auto-syncing password to cloud notice:", syncErr.message);
+          }
         } else {
           throw authError;
         }

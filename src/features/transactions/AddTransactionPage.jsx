@@ -5,25 +5,25 @@ import {
   getTransactionById,
   addTransaction,
   updateTransaction
-} from "./transactionService";
+} from "./services/transactionService";
 import {
   getRequirementsByTransactionId,
   addRequirement,
   updateRequirement,
   deleteRequirement
-} from "../requirements/requirementService";
+} from "./services/requirementService";
 import {
   getProcedureStepsByTransactionId,
   addProcedureStep,
   updateProcedureStep,
   deleteProcedureStep
-} from "../procedures/procedureService";
+} from "./services/procedureService";
 import {
   getGuidelinesByTransactionId,
   addGuideline,
   updateGuideline,
   deleteGuideline
-} from "../guidelines/guidelineService";
+} from "./services/guidelineService";
 import { uploadProcedureImage } from "../../services/cloudinaryService";
 import {
   buildRequirementId,

@@ -14,7 +14,7 @@ import {
   setTransactionActiveStatus,
   deleteTransaction,
   getTransactionChildCounts
-} from "./transactionService";
+} from "./services/transactionService";
 
 import DeleteConfirmationModal from "../../components/DeleteConfirmationModal";
 
@@ -85,24 +85,44 @@ function TransactionsPage() {
       setErrorMessage("");
 
       const [
-        transactionData,
-        serviceData
-      ] = await Promise.all([
+        transactionResult,
+        serviceResult
+      ] = await Promise.allSettled([
         getAllTransactions(),
         getActiveServices()
       ]);
 
-      setTransactions(transactionData);
-      setServices(serviceData);
+      if (transactionResult.status === "fulfilled") {
+        setTransactions(transactionResult.value || []);
+      } else {
+        console.error(
+          "Failed to load transactions:",
+          transactionResult.reason
+        );
+        setErrorMessage(
+          transactionResult.reason?.message?.includes("timed out")
+            ? "Connection timed out loading transactions. Please check your network connection."
+            : "Unable to load transactions. Please try again."
+        );
+      }
+
+      if (serviceResult.status === "fulfilled") {
+        setServices(serviceResult.value || []);
+      } else {
+        console.error(
+          "Failed to load active services for filter:",
+          serviceResult.reason
+        );
+      }
 
     } catch (error) {
       console.error(
-        "Failed to load transactions:",
+        "Unexpected error in loadData:",
         error
       );
 
       setErrorMessage(
-        "Unable to load transactions."
+        "Unable to load transactions. Please try again."
       );
 
     } finally {
@@ -117,16 +137,36 @@ function TransactionsPage() {
     const fetchInitialData = async () => {
       try {
         const [
-          transactionData,
-          serviceData
-        ] = await Promise.all([
+          transactionResult,
+          serviceResult
+        ] = await Promise.allSettled([
           getAllTransactions(),
           getActiveServices()
         ]);
 
         if (!ignore) {
-          setTransactions(transactionData);
-          setServices(serviceData);
+          if (transactionResult.status === "fulfilled") {
+            setTransactions(transactionResult.value || []);
+          } else {
+            console.error(
+              "Failed to load transactions:",
+              transactionResult.reason
+            );
+            setErrorMessage(
+              transactionResult.reason?.message?.includes("timed out")
+                ? "Connection timed out loading transactions. Please check your network connection."
+                : "Unable to load transactions. Please try again."
+            );
+          }
+
+          if (serviceResult.status === "fulfilled") {
+            setServices(serviceResult.value || []);
+          } else {
+            console.error(
+              "Failed to load active services for filter:",
+              serviceResult.reason
+            );
+          }
         }
 
       } catch (error) {
@@ -137,7 +177,7 @@ function TransactionsPage() {
 
         if (!ignore) {
           setErrorMessage(
-            "Unable to load transactions."
+            "Unable to load transactions. Please try again."
           );
         }
 
@@ -467,14 +507,6 @@ function TransactionsPage() {
 
               {/* CONTEXTUAL SEARCH BAR */}
               <div className="transactions-search-bar">
-
-                <span
-                  className="transactions-search-icon"
-                  aria-hidden="true"
-                >
-                  🔍
-                </span>
-
                 <input
                   type="text"
                   className="transactions-search-input"
@@ -594,6 +626,30 @@ function TransactionsPage() {
             <p className="transactions-state-message">
               Loading transactions...
             </p>
+
+          ) : errorMessage && transactions.length === 0 ? (
+
+            <div className="transactions-state-message" style={{ textAlign: "center", padding: "24px 16px" }}>
+              <p style={{ color: "#d32f2f", marginBottom: "16px", fontWeight: "500" }}>
+                {errorMessage}
+              </p>
+              <button
+                type="button"
+                onClick={loadData}
+                style={{
+                  padding: "8px 18px",
+                  background: "#1976d2",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600"
+                }}
+              >
+                Retry Loading
+              </button>
+            </div>
 
           ) : filteredTransactions.length === 0 ? (
 

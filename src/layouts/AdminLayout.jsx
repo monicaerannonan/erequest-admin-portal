@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import {
   NavLink,
   Outlet,
+  useLocation,
   useNavigate
 } from "react-router-dom";
 
@@ -133,7 +135,13 @@ function ProfileIcon() {
 function AdminLayout() {
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, initials } = useAdminProfile();
+
+  /* Keep viewport position pristine and scroll to top upon page navigation */
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
 
   /* =========================================================
@@ -393,6 +401,15 @@ function AdminLayout() {
 
 
       </aside>
+
+
+
+      {/* =====================================================
+          STATIONARY WATERMARK SEAL (LOCKED IN POSITION ACROSS ALL ROUTES)
+          ===================================================== */}
+      <div className="admin-portal-watermark" aria-hidden="true">
+        <div className="admin-portal-watermark-seal" />
+      </div>
 
 
 

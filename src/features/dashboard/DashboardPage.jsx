@@ -6,7 +6,7 @@ import {
 } from "./activityLogService";
 
 import { getAllServices } from "../services/serviceService";
-import { getAllTransactions } from "../transactions/transactionService";
+import { getAllTransactions } from "../transactions/services/transactionService";
 import { getAllAnnouncements } from "../announcements/announcementService";
 import AdminSearch from "../search/AdminSearch";
 

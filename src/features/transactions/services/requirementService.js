@@ -10,32 +10,32 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 
-import { db } from "../../firebase/firebaseConfig";
-import { addActivityLog } from "../dashboard/activityLogService";
+import { db } from "../../../firebase/firebaseConfig";
+import { addActivityLog } from "../../dashboard/activityLogService";
 import {
-  buildGuidelineId,
+  buildRequirementId,
   createDocumentIfAbsent
-} from "../../utils/idUtils";
+} from "../../../utils/idUtils";
 
-const GUIDELINES_COLLECTION = "department_guidelines";
+const REQUIREMENTS_COLLECTION = "requirements";
 const TRANSACTIONS_COLLECTION = "transactions";
 
 
 /* =========================================
-   GET ALL GUIDELINES
+   GET ALL REQUIREMENTS
    ========================================= */
 
-export async function getAllGuidelines() {
+export async function getAllRequirements() {
   const snapshot = await getDocs(
-    collection(db, GUIDELINES_COLLECTION)
+    collection(db, REQUIREMENTS_COLLECTION)
   );
 
-  const guidelines = snapshot.docs.map((document) => ({
+  const requirements = snapshot.docs.map((document) => ({
     id: document.id,
     ...document.data()
   }));
 
-  guidelines.sort((a, b) => {
+  requirements.sort((a, b) => {
     const transactionCompare =
       (a.transactionId || "").localeCompare(
         b.transactionId || ""
@@ -48,40 +48,69 @@ export async function getAllGuidelines() {
     return (a.displayOrder || 0) - (b.displayOrder || 0);
   });
 
-  return guidelines;
+  return requirements;
 }
 
 
 /* =========================================
-   GET GUIDELINES BY TRANSACTION ID
+   GET REQUIREMENTS BY TRANSACTION ID
    ========================================= */
 
-export async function getGuidelinesByTransactionId(transactionId) {
+export async function getRequirementsByTransactionId(transactionId) {
   if (!transactionId) {
     return [];
   }
 
   const q = query(
-    collection(db, GUIDELINES_COLLECTION),
+    collection(db, REQUIREMENTS_COLLECTION),
     where("transactionId", "==", transactionId)
   );
 
   const snapshot = await getDocs(q);
 
-  const guidelines = snapshot.docs.map((document) => ({
+  const requirements = snapshot.docs.map((document) => ({
     id: document.id,
     ...document.data()
   }));
 
-  guidelines.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  requirements.sort(
+    (a, b) => (a.displayOrder || 0) - (b.displayOrder || 0)
+  );
 
-  return guidelines;
+  return requirements;
+}
+
+
+/* =========================================
+   GET ACTIVE TRANSACTIONS
+   ========================================= */
+
+export async function getActiveTransactions() {
+  const snapshot = await getDocs(
+    collection(db, TRANSACTIONS_COLLECTION)
+  );
+
+  const transactions = snapshot.docs
+    .map((document) => ({
+      id: document.id,
+      ...document.data()
+    }))
+    .filter(
+      (transaction) =>
+        transaction.isActive === true
+    );
+
+  transactions.sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "")
+  );
+
+  return transactions;
 }
 
 
 /* =========================================
    GET TRANSACTION NAME
-   For Recent Updates
+   Used for Recent Updates
    ========================================= */
 
 async function getTransactionName(transactionId) {
@@ -114,27 +143,27 @@ async function getTransactionName(transactionId) {
 
 
 /* =========================================
-   ADD GUIDELINE
+   ADD REQUIREMENT
    ========================================= */
 
-export async function addGuideline(
+export async function addRequirement(
   transactionId,
-  guidelineText,
+  requirementText,
   displayOrder
 ) {
   const cleanTransactionId = transactionId.trim();
-  const cleanGuidelineText = guidelineText.trim();
+  const cleanRequirementText = requirementText.trim();
   const cleanDisplayOrder = Number(displayOrder);
 
   if (!cleanTransactionId) {
     throw new Error(
-      "Transaction ID is required."
+      "Please select a transaction."
     );
   }
 
-  if (!cleanGuidelineText) {
+  if (!cleanRequirementText) {
     throw new Error(
-      "Guideline is required."
+      "Requirement is required."
     );
   }
 
@@ -143,28 +172,28 @@ export async function addGuideline(
     cleanDisplayOrder < 1
   ) {
     throw new Error(
-      "Display order must be greater than 0."
+      "Display order must be a number greater than 0."
     );
   }
 
-  const guidelineId = buildGuidelineId(
+  const requirementId = buildRequirementId(
     cleanTransactionId,
-    cleanGuidelineText
+    cleanRequirementText
   );
 
   await createDocumentIfAbsent(
     db,
-    GUIDELINES_COLLECTION,
-    guidelineId,
+    REQUIREMENTS_COLLECTION,
+    requirementId,
     {
       transactionId: cleanTransactionId,
-      guidelineText: cleanGuidelineText,
+      requirementText: cleanRequirementText,
       displayOrder: cleanDisplayOrder,
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     },
-    `A guideline with the text "${cleanGuidelineText}" already exists for this transaction.`
+    `A requirement with the text "${cleanRequirementText}" already exists for this transaction.`
   );
 
   /* ACTIVITY LOG (NON-BLOCKING) */
@@ -174,51 +203,51 @@ export async function addGuideline(
 
   try {
     await addActivityLog({
-      type: "guideline",
+      type: "requirement",
       action: "added",
-      title: cleanGuidelineText,
-      description: "New guideline added",
+      title: cleanRequirementText,
+      description: "New requirement added",
       parentName: transactionName,
       parentId: cleanTransactionId,
-      recordId: guidelineId
+      recordId: requirementId
     });
   } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    console.warn("Requirement activity log notice:", logErr?.message || logErr);
   }
 
-  return guidelineId;
+  return requirementId;
 }
 
 
 /* =========================================
-   UPDATE GUIDELINE
+   UPDATE REQUIREMENT
    ========================================= */
 
-export async function updateGuideline(
-  guidelineId,
+export async function updateRequirement(
+  requirementId,
   transactionId,
-  guidelineText,
+  requirementText,
   displayOrder
 ) {
   const cleanTransactionId = transactionId.trim();
-  const cleanGuidelineText = guidelineText.trim();
+  const cleanRequirementText = requirementText.trim();
   const cleanDisplayOrder = Number(displayOrder);
 
-  if (!guidelineId) {
+  if (!requirementId) {
     throw new Error(
-      "Guideline ID is required."
+      "Requirement ID is required."
     );
   }
 
   if (!cleanTransactionId) {
     throw new Error(
-      "Transaction ID is required."
+      "Please select a transaction."
     );
   }
 
-  if (!cleanGuidelineText) {
+  if (!cleanRequirementText) {
     throw new Error(
-      "Guideline is required."
+      "Requirement is required."
     );
   }
 
@@ -227,19 +256,19 @@ export async function updateGuideline(
     cleanDisplayOrder < 1
   ) {
     throw new Error(
-      "Display order must be greater than 0."
+      "Display order must be a number greater than 0."
     );
   }
 
-  const guidelineRef = doc(
+  const requirementRef = doc(
     db,
-    GUIDELINES_COLLECTION,
-    guidelineId
+    REQUIREMENTS_COLLECTION,
+    requirementId
   );
 
-  await updateDoc(guidelineRef, {
+  await updateDoc(requirementRef, {
     transactionId: cleanTransactionId,
-    guidelineText: cleanGuidelineText,
+    requirementText: cleanRequirementText,
     displayOrder: cleanDisplayOrder,
     updatedAt: serverTimestamp()
   });
@@ -251,61 +280,59 @@ export async function updateGuideline(
 
   try {
     await addActivityLog({
-      type: "guideline",
+      type: "requirement",
       action: "updated",
-      title: cleanGuidelineText,
-      description: "Guideline information updated",
+      title: cleanRequirementText,
+      description: "Requirement information updated",
       parentName: transactionName,
       parentId: cleanTransactionId,
-      recordId: guidelineId
+      recordId: requirementId
     });
   } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    console.warn("Requirement activity log notice:", logErr?.message || logErr);
   }
 }
 
 
 /* =========================================
-   ACTIVATE / DEACTIVATE GUIDELINE
+   ACTIVATE / DEACTIVATE REQUIREMENT
    ========================================= */
 
-export async function setGuidelineActiveStatus(
-  guidelineId,
+export async function setRequirementActiveStatus(
+  requirementId,
   isActive
 ) {
-  if (!guidelineId) {
+  if (!requirementId) {
     throw new Error(
-      "Guideline ID is required."
+      "Requirement ID is required."
     );
   }
 
-  const guidelineRef = doc(
+  const requirementRef = doc(
     db,
-    GUIDELINES_COLLECTION,
-    guidelineId
+    REQUIREMENTS_COLLECTION,
+    requirementId
   );
 
-  /*
-   * Get guideline information first.
-   */
-  const guidelineSnap =
-    await getDoc(guidelineRef);
+  /* Get requirement before updating */
+  const requirementSnap =
+    await getDoc(requirementRef);
 
-  const guidelineData =
-    guidelineSnap.exists()
-      ? guidelineSnap.data()
+  const requirementData =
+    requirementSnap.exists()
+      ? requirementSnap.data()
       : null;
 
-  const guidelineName =
-    guidelineData?.guidelineText || "Guideline";
+  const requirementName =
+    requirementData?.requirementText || "Requirement";
 
   const transactionId =
-    guidelineData?.transactionId || "";
+    requirementData?.transactionId || "";
 
   const transactionName =
     await getTransactionName(transactionId);
 
-  await updateDoc(guidelineRef, {
+  await updateDoc(requirementRef, {
     isActive,
     updatedAt: serverTimestamp()
   });
@@ -314,76 +341,78 @@ export async function setGuidelineActiveStatus(
 
   try {
     await addActivityLog({
-      type: "guideline",
+      type: "requirement",
       action: isActive
         ? "activated"
         : "deactivated",
-      title: guidelineName,
+      title: requirementName,
       description: isActive
-        ? "Guideline activated"
-        : "Guideline deactivated",
+        ? "Requirement activated"
+        : "Requirement deactivated",
       parentName: transactionName,
       parentId: transactionId,
-      recordId: guidelineId
+      recordId: requirementId
     });
   } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    console.warn("Requirement activity log notice:", logErr?.message || logErr);
   }
 }
 
 
 /* =========================================
-   DELETE GUIDELINE
+   DELETE REQUIREMENT
    ========================================= */
 
-export async function deleteGuideline(guidelineId) {
-  if (!guidelineId) {
+export async function deleteRequirement(
+  requirementId
+) {
+  if (!requirementId) {
     throw new Error(
-      "Guideline ID is required."
+      "Requirement ID is required."
     );
   }
 
-  const guidelineRef = doc(
+  const requirementRef = doc(
     db,
-    GUIDELINES_COLLECTION,
-    guidelineId
+    REQUIREMENTS_COLLECTION,
+    requirementId
   );
 
   /*
    * Get information BEFORE deletion.
    */
-  const guidelineSnap =
-    await getDoc(guidelineRef);
+  const requirementSnap =
+    await getDoc(requirementRef);
 
-  const guidelineData =
-    guidelineSnap.exists()
-      ? guidelineSnap.data()
+  const requirementData =
+    requirementSnap.exists()
+      ? requirementSnap.data()
       : null;
 
-  const guidelineName =
-    guidelineData?.guidelineText || "Guideline";
+  const requirementName =
+    requirementData?.requirementText || "Requirement";
 
   const transactionId =
-    guidelineData?.transactionId || "";
+    requirementData?.transactionId || "";
 
   const transactionName =
     await getTransactionName(transactionId);
 
-  await deleteDoc(guidelineRef);
+  await deleteDoc(requirementRef);
 
   /* ACTIVITY LOG (NON-BLOCKING) */
 
   try {
     await addActivityLog({
-      type: "guideline",
+      type: "requirement",
       action: "deleted",
-      title: guidelineName,
-      description: "Guideline deleted",
+      title: requirementName,
+      description: "Requirement deleted",
       parentName: transactionName,
       parentId: transactionId,
-      recordId: guidelineId
+      recordId: requirementId
     });
   } catch (logErr) {
-    console.warn("Guideline activity log notice:", logErr?.message || logErr);
+    console.warn("Requirement activity log notice:", logErr?.message || logErr);
   }
 }

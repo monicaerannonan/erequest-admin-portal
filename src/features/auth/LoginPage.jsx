@@ -8,6 +8,7 @@ import {
   verifyPasswordResetOTP,
   setNewAdminPassword,
   logoutAdmin,
+  validatePasswordCriteria,
   DEFAULT_ADMIN_EMAIL
 } from "./authService";
 import "./LoginPage.css";
@@ -37,43 +38,6 @@ function LoginPage({ initialMode = "login" }) {
   // Mode: "login" | "forgot_password" | "verify_otp" | "set_new_password"
   const [mode, setMode] = useState(resolveInitialMode);
 
-  // Synchronize mode when browser Back / Forward buttons or hash changes occur
-  useEffect(() => {
-    if (location.pathname === "/forgot-password") {
-      if (mode === "login") {
-        setMode("forgot_password");
-        setErrorMessage("");
-        setSuccessMessage("");
-      }
-    } else if (location.pathname === "/login") {
-      const params = new URLSearchParams(location.search);
-      const isModeForgot =
-        params.get("mode") === "forgot_password" ||
-        params.get("mode") === "forgot-password" ||
-        location.state?.mode === "forgot_password";
-
-      if (!isModeForgot && mode !== "login") {
-        setMode("login");
-        setOtp("");
-        setNewPassword("");
-        setConfirmPassword("");
-        setErrorMessage("");
-      }
-    }
-  }, [location.pathname, location.search, location.state]);
-
-  // Security guard: Ensure active session is revoked when entering password recovery
-  // so browser Back cannot re-enter protected routes
-  useEffect(() => {
-    if (location.pathname === "/forgot-password" || mode === "forgot_password") {
-      if (auth?.currentUser) {
-        logoutAdmin().catch((err) => {
-          console.warn("Notice signing out previous session:", err);
-        });
-      }
-    }
-  }, [location.pathname, mode]);
-
   // Login form state
   const [email, setEmail] = useState(DEFAULT_ADMIN_EMAIL);
   const [password, setPassword] = useState("");
@@ -95,6 +59,48 @@ function LoginPage({ initialMode = "login" }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
+
+  // Live password complexity & matching evaluation
+  const passwordCriteria = validatePasswordCriteria(newPassword);
+  const passwordsMatch = confirmPassword.length > 0 && newPassword === confirmPassword;
+
+  // Synchronize mode when browser Back / Forward buttons or hash changes occur
+  useEffect(() => {
+    if (location.pathname === "/forgot-password") {
+      if (mode === "login") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setMode("forgot_password");
+        setErrorMessage("");
+        setSuccessMessage("");
+      }
+    } else if (location.pathname === "/login") {
+      const params = new URLSearchParams(location.search);
+      const isModeForgot =
+        params.get("mode") === "forgot_password" ||
+        params.get("mode") === "forgot-password" ||
+        location.state?.mode === "forgot_password";
+
+      if (!isModeForgot && mode !== "login") {
+        setMode("login");
+        setOtp("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setErrorMessage("");
+      }
+    }
+  }, [location.pathname, location.search, location.state, mode]);
+
+  // Security guard: Ensure active session is revoked when entering password recovery
+  // so browser Back cannot re-enter protected routes
+  useEffect(() => {
+    if (location.pathname === "/forgot-password" || mode === "forgot_password") {
+      if (auth?.currentUser) {
+        logoutAdmin().catch((err) => {
+          console.warn("Notice signing out previous session:", err);
+        });
+      }
+    }
+  }, [location.pathname, mode]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -200,7 +206,7 @@ function LoginPage({ initialMode = "login" }) {
       // STRICT SECURITY RULE: The OTP must NOT be displayed or shown on the screen.
       // The UI displays ONLY a notification stating that the OTP has been successfully sent to the registered email.
       setSuccessMessage(
-        `A 6-character OTP has been successfully sent to ${targetEmail}. Please check your Gmail.`
+        `OTP has been successfully sent to ${targetEmail}. Please check your Gmail.`
       );
     } catch (error) {
       console.error("Failed to send OTP:", error);
@@ -258,8 +264,44 @@ function LoginPage({ initialMode = "login" }) {
     setSuccessMessage("");
     setInfoMessage("");
 
-    if (!newPassword || newPassword.length < 6) {
-      setErrorMessage("New password must be at least 6 characters long.");
+    if (!newPassword) {
+      setErrorMessage("Please enter your new administrator password.");
+      return;
+    }
+
+    if (newPassword.includes(" ") || /\s/.test(newPassword)) {
+      setErrorMessage("Space detected! Spaces are not allowed in passwords. Please remove any spaces to proceed.");
+      return;
+    }
+
+    const nonSpaceLength = newPassword.replace(/\s/g, "").length;
+    if (nonSpaceLength < 8) {
+      setErrorMessage("New password must be at least 8 characters long.");
+      return;
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      setErrorMessage("New password must contain at least one uppercase letter (A-Z).");
+      return;
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      setErrorMessage("New password must contain at least one lowercase letter (a-z).");
+      return;
+    }
+
+    if (!/[0-9]/.test(newPassword)) {
+      setErrorMessage("New password must contain at least one number (0-9).");
+      return;
+    }
+
+    if (/[^A-Za-z0-9!&#*_\s]/.test(newPassword)) {
+      setErrorMessage("Only !, &, #, *, and _ are allowed as special characters.");
+      return;
+    }
+
+    if (!/[!&#*_]/.test(newPassword)) {
+      setErrorMessage("New password must contain at least one special character (!, &, #, *, _).");
       return;
     }
 
@@ -473,17 +515,17 @@ function LoginPage({ initialMode = "login" }) {
             </div>
 
             <div className="form-instruction">
-              Please enter the 6-character alphanumeric code sent to{" "}
+              Please enter the One-Time-Passcode sent to{" "}
               <strong>{resetEmail}</strong>.
             </div>
 
             <div className="form-group">
-              <label htmlFor="otp">6-Character Verification Code (OTP)</label>
+              <label htmlFor="otp">Verification Code (OTP)</label>
               <input
                 id="otp"
                 type="text"
                 className="otp-input"
-                placeholder="Enter 6-character code"
+                placeholder="Enter verification code"
                 value={otp}
                 maxLength={6}
                 onChange={(event) =>
@@ -553,7 +595,7 @@ function LoginPage({ initialMode = "login" }) {
                 <input
                   id="newPassword"
                   type={showNewPassword ? "text" : "password"}
-                  placeholder="Enter new password (min. 6 characters)"
+                  placeholder="Enter new password (min. 8 characters)"
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   disabled={loading}
@@ -569,6 +611,43 @@ function LoginPage({ initialMode = "login" }) {
                 >
                   {showNewPassword ? "Hide" : "Show"}
                 </button>
+              </div>
+
+              {/* Space Detected Warning Box */}
+              {newPassword.includes(" ") && (
+                <div className="space-warning-banner" role="alert">
+                  <span className="space-warning-icon">⚠</span>
+                  <span>Space detected! Spaces are not allowed in passwords. You cannot proceed with a space.</span>
+                </div>
+              )}
+
+              {/* Dynamic Live Password Requirements Checklist */}
+              <div className="password-requirements-card">
+                <div className="password-requirements-title">
+                  Password Requirements:
+                </div>
+                <ul className="password-requirements-list">
+                  <li className={passwordCriteria.isMinLength ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{passwordCriteria.isMinLength ? "✓" : "✕"}</span>
+                    <span>Minimum 8 characters</span>
+                  </li>
+                  <li className={passwordCriteria.hasUppercase ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{passwordCriteria.hasUppercase ? "✓" : "✕"}</span>
+                    <span>At least one uppercase letter (A-Z)</span>
+                  </li>
+                  <li className={passwordCriteria.hasLowercase ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{passwordCriteria.hasLowercase ? "✓" : "✕"}</span>
+                    <span>At least one lowercase letter (a-z)</span>
+                  </li>
+                  <li className={passwordCriteria.hasNumber ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{passwordCriteria.hasNumber ? "✓" : "✕"}</span>
+                    <span>At least one number (0-9)</span>
+                  </li>
+                  <li className={passwordCriteria.hasSpecialOnly ? "req-met" : "req-unmet"}>
+                    <span className="req-icon">{passwordCriteria.hasSpecialOnly ? "✓" : "✕"}</span>
+                    <span>Special character (! & # * _ only)</span>
+                  </li>
+                </ul>
               </div>
             </div>
 
@@ -594,12 +673,23 @@ function LoginPage({ initialMode = "login" }) {
                   {showConfirmPassword ? "Hide" : "Show"}
                 </button>
               </div>
+
+              {confirmPassword.length > 0 && (
+                <div
+                  className={`password-match-indicator ${
+                    passwordsMatch ? "match-success" : "match-error"
+                  }`}
+                >
+                  <span className="req-icon">{passwordsMatch ? "✓" : "✕"}</span>
+                  <span>{passwordsMatch ? "Passwords match" : "Passwords do not match"}</span>
+                </div>
+              )}
             </div>
 
             <button
               type="submit"
               className="login-button"
-              disabled={loading}
+              disabled={loading || newPassword.includes(" ") || !passwordCriteria.isValid || !passwordsMatch}
             >
               {loading ? "Updating Password..." : "Confirm & Update Password"}
             </button>

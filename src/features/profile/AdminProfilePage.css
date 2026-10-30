@@ -137,18 +137,55 @@
    ========================================================= */
 
 .admin-profile-hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 26px;
-  padding: 26px 30px;
-  background: linear-gradient(135deg, #173b65 0%, #1a4d85 100%);
+  padding: 30px 32px;
+  min-height: 155px;
+  background: #0d2745;
   border-radius: 16px;
   color: #ffffff;
   margin-bottom: 28px;
-  box-shadow: 0 8px 24px rgba(23, 59, 101, 0.16);
+  box-shadow: 0 8px 24px rgba(13, 39, 69, 0.22);
+}
+
+/* ICCT Building Background Image (clearly focused on the entrance) */
+.admin-profile-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("../../assets/icct-building.jpg");
+  background-size: cover;
+  background-position: 70% 88%;
+  background-repeat: no-repeat;
+  opacity: 0.65;
+  filter: contrast(1.08) brightness(1.04);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Semi-transparent Overlay: high text contrast on the left, clear and bright entrance on the right */
+.admin-profile-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(13, 39, 69, 0.94) 0%,
+    rgba(13, 39, 69, 0.88) 36%,
+    rgba(13, 39, 69, 0.45) 60%,
+    rgba(13, 39, 69, 0.10) 80%,
+    rgba(13, 39, 69, 0.04) 100%
+  );
+  z-index: 0;
+  pointer-events: none;
 }
 
 .admin-profile-avatar-large {
+  position: relative;
+  z-index: 1;
   width: 76px;
   height: 76px;
   border-radius: 50%;
@@ -165,6 +202,8 @@
 }
 
 .admin-profile-hero-info {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
 }
@@ -182,6 +221,7 @@
   font-size: 24px;
   font-weight: 700;
   color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
 }
 
 .admin-profile-role-pill {
@@ -208,7 +248,8 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #d6e4f3;
+  color: #e2ecf7;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .admin-profile-meta-item svg {
@@ -550,6 +591,12 @@
   border-left: 4px solid #174a78;
 }
 
+.admin-profile-security-card .admin-profile-card-header {
+  margin-bottom: 16px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .admin-profile-security-body {
   display: flex;
   flex-direction: column;
@@ -632,8 +679,22 @@
   .admin-profile-hero {
     flex-direction: column;
     text-align: center;
-    padding: 22px 18px;
+    padding: 24px 20px;
     gap: 16px;
+    min-height: 200px;
+  }
+
+  .admin-profile-hero::before {
+    background-position: 70% 88%;
+  }
+
+  .admin-profile-hero::after {
+    background: linear-gradient(
+      180deg,
+      rgba(13, 39, 69, 0.92) 0%,
+      rgba(13, 39, 69, 0.75) 55%,
+      rgba(13, 39, 69, 0.15) 100%
+    );
   }
 
   .admin-profile-hero-meta {

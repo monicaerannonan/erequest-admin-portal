@@ -21,6 +21,8 @@ body,
 
 html {
   background: #ffffff;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -30,11 +32,40 @@ body {
 
   font-family:
     Inter,
-    Arial,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
     Helvetica,
+    Arial,
     sans-serif;
 
   color: #1d2d3e;
+}
+
+/* Modern & Executive Headings with Plus Jakarta Sans */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family:
+    "Plus Jakarta Sans",
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: -0.02em;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
 }
 
 #root {
@@ -84,4 +115,18 @@ body {
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.2px;
+}
+
+/* =========================================
+   PAGE WRAPPERS (Transparent for Watermark)
+   ========================================= */
+.dashboard-page,
+.services-page,
+.transactions-page,
+.announcements-page,
+.admin-profile-page,
+.add-service-page,
+.add-transaction-page,
+.add-announcement-page {
+  background: transparent !important;
 }

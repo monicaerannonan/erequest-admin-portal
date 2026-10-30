@@ -4,6 +4,7 @@
    ========================================= */
 
 .login-page {
+  position: relative;
   width: 100%;
   min-height: 100vh;
 
@@ -13,7 +14,13 @@
 
   padding: 24px;
 
-  background: #ffffff;
+  background-color: #010066;
+  background-image: radial-gradient(
+    circle at 50% 45%,
+    #05047d 0%,
+    #010066 70%
+  );
+  overflow: hidden;
 
   font-family:
     Inter,
@@ -22,24 +29,62 @@
     sans-serif;
 }
 
+/* Official Transparent ICCT Seal in Lower Right Background */
+.login-page::before {
+  content: "";
+  position: fixed;
+  right: -15px;
+  bottom: -15px;
+  width: min(480px, 39vw);
+  height: min(480px, 39vw);
+  background-image: url("../../assets/icct-seal.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.30; /* 30% opacity as requested */
+  transform: perspective(1000px) rotateX(42deg) rotateY(-10deg) rotateZ(28deg);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* Subtle Tech Micro-Grid Layer (Modern IT / Capstone Aesthetic) */
+.login-page::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 36px 36px;
+  background-position: center center;
+  pointer-events: none;
+  z-index: 1;
+}
+
 
 /* =========================================
    LOGIN CARD
    ========================================= */
 
 .login-card {
+  position: relative;
+  z-index: 2;
+
   width: 100%;
   max-width: 430px;
 
   background: #ffffff;
 
-  border: 1px solid #e5eaf0;
+  border: 1px solid rgba(255, 255, 255, 0.20);
   border-radius: 20px;
 
   padding: 42px 38px;
 
   box-shadow:
-    0 20px 50px rgba(28, 48, 74, 0.10);
+    0 24px 60px rgba(0, 0, 30, 0.45),
+    0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 
@@ -427,6 +472,139 @@
 
 
 /* =========================================
+   PASSWORD REQUIREMENTS & STRENGTH CHECKLIST
+   ========================================= */
+
+.password-requirements-card {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.password-requirements-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.password-requirements-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.password-requirements-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+  transition: color 0.18s ease;
+}
+
+/* Green when fulfilled */
+.password-requirements-list li.req-met {
+  color: #166534; /* Rich bold green */
+}
+
+/* Red when unfulfilled / kulang */
+.password-requirements-list li.req-unmet {
+  color: #dc2626; /* Clear bold red */
+}
+
+.req-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.req-met .req-icon {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.req-unmet .req-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Space warning banner */
+.space-warning-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.space-warning-icon {
+  font-size: 14px;
+}
+
+/* Confirm Password Match Indicator */
+.password-match-indicator {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.password-match-indicator.match-success {
+  color: #166534;
+}
+
+.password-match-indicator.match-error {
+  color: #dc2626;
+}
+
+.password-match-indicator.match-success .req-icon {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.password-match-indicator.match-error .req-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
    FOOTER
    ========================================= */
 
@@ -452,11 +630,31 @@
    TABLET / MOBILE
    ========================================= */
 
+@media (max-width: 900px) {
+  .login-page::before {
+    width: min(340px, 40vw);
+    height: min(340px, 40vw);
+    opacity: 0.25;
+    right: -15px;
+    bottom: -15px;
+    transform: perspective(800px) rotateX(42deg) rotateY(-10deg) rotateZ(28deg);
+  }
+}
+
 @media (max-width: 520px) {
 
   .login-page {
     min-height: 100vh;
     padding: 16px;
+  }
+
+  .login-page::before {
+    width: min(250px, 55vw);
+    height: min(250px, 55vw);
+    opacity: 0.20;
+    right: -10px;
+    bottom: -10px;
+    transform: perspective(600px) rotateX(42deg) rotateY(-10deg) rotateZ(28deg);
   }
 
   .login-card {

@@ -4,19 +4,19 @@ import {
 
 import {
   getAllTransactions
-} from "../transactions/transactionService";
+} from "../transactions/services/transactionService";
 
 import {
   getAllRequirements
-} from "../requirements/requirementService";
+} from "../transactions/services/requirementService";
 
 import {
   getAllProcedureSteps
-} from "../procedures/procedureService";
+} from "../transactions/services/procedureService";
 
 import {
   getAllGuidelines
-} from "../guidelines/guidelineService";
+} from "../transactions/services/guidelineService";
 
 import {
   getAllAnnouncements

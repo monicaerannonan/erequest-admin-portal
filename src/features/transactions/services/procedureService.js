@@ -10,12 +10,12 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 
-import { db } from "../../firebase/firebaseConfig";
-import { addActivityLog } from "../dashboard/activityLogService";
+import { db } from "../../../firebase/firebaseConfig";
+import { addActivityLog } from "../../dashboard/activityLogService";
 import {
   buildProcedureStepId,
   createDocumentIfAbsent
-} from "../../utils/idUtils";
+} from "../../../utils/idUtils";
 
 const PROCEDURES_COLLECTION = "procedure_steps";
 const TRANSACTIONS_COLLECTION = "transactions";

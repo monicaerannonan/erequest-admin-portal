@@ -45,7 +45,9 @@ import {
   sendPasswordResetOTP,
   verifyPasswordResetOTP,
   setNewAdminPassword,
-  verifyAndResetPassword
+  verifyAndResetPassword,
+  validatePasswordCriteria,
+  ALLOWED_SPECIAL_CHARS
 } from "../src/features/auth/authService.js";
 
 test("Credentials & Constants: Matches specified admin defaults", () => {
@@ -54,6 +56,7 @@ test("Credentials & Constants: Matches specified admin defaults", () => {
   assert.equal(EMAILJS_SERVICE_ID, "service_4rwr6df");
   assert.equal(EMAILJS_TEMPLATE_ID, "template_065t767");
   assert.equal(EMAILJS_PUBLIC_KEY, "iC0ESDFLUm8ZrV8q2");
+  assert.equal(ALLOWED_SPECIAL_CHARS, "!&#*_");
 });
 
 test("OTP Generation: Generates 6-character alphanumeric mixed codes", () => {
@@ -214,17 +217,95 @@ test("Password Reset Verification: Rejects invalid or mismatched entries", async
     /do not match/i
   );
 
-  // 3. Short password
+    // 3. Short password (minimum 8 characters)
   await assert.rejects(
     async () => {
       await verifyAndResetPassword(
         "erequesticctadmin@gmail.com",
         validOtp,
-        "123",
-        "123"
+        "Ab1!#",
+        "Ab1!#"
       );
     },
-    /at least 6 characters long/i
+    /at least 8 characters long/i
+  );
+
+  // 4. Password containing spaces cannot proceed and is rejected
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "#I CCt4228",
+        "#I CCt4228"
+      );
+    },
+    /spaces/i
+  );
+
+  // 5. Missing uppercase letter
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "newadminpass1!",
+        "newadminpass1!"
+      );
+    },
+    /uppercase/i
+  );
+
+  // 6. Missing lowercase letter
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "NEWADMINPASS1!",
+        "NEWADMINPASS1!"
+      );
+    },
+    /lowercase/i
+  );
+
+  // 7. Missing number
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "NewAdminPass!",
+        "NewAdminPass!"
+      );
+    },
+    /number/i
+  );
+
+  // 8. Missing special character
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "NewAdminPass123",
+        "NewAdminPass123"
+      );
+    },
+    /special character/i
+  );
+
+  // 9. Unallowed special characters (e.g. @ or $; only !&#*_ permitted)
+  await assert.rejects(
+    async () => {
+      await verifyAndResetPassword(
+        "erequesticctadmin@gmail.com",
+        validOtp,
+        "NewAdminPass123@",
+        "NewAdminPass123@"
+      );
+    },
+    /Only !, &, #, \*, and _/i
   );
 });
 
@@ -373,4 +454,78 @@ test("Route Mode Resolution: Direct navigation correctly maps to forgot_password
 
   // Default /login lands in login mode
   assert.equal(resolveMode({ pathname: "/login" }), "login");
+});
+
+test("Password Criteria Live Evaluator: Correctly evaluates green/red states and ignores spaces", () => {
+  // 1. Empty input -> all criteria unfulfilled (red)
+  const emptyEval = validatePasswordCriteria("");
+  assert.equal(emptyEval.isMinLength, false);
+  assert.equal(emptyEval.hasUppercase, false);
+  assert.equal(emptyEval.hasLowercase, false);
+  assert.equal(emptyEval.hasNumber, false);
+  assert.equal(emptyEval.hasSpecial, false);
+  assert.equal(emptyEval.hasSpecialOnly, false);
+  assert.equal(emptyEval.isValid, false);
+
+  // 2. Space detection: Spaces MUST NOT count towards length
+  // "Abcd!#1 " has 7 non-spaces + 1 space. Length must be 7, not 8!
+  const spaceCountEval = validatePasswordCriteria("Abcd!#1 ");
+  assert.equal(spaceCountEval.nonSpaceLength, 7);
+  assert.equal(spaceCountEval.isMinLength, false, "Spaces should not be counted towards minimum 8 characters");
+  assert.equal(spaceCountEval.isValid, false);
+
+  // Multiple spaces "        " (8 spaces) -> non-space length 0
+  const allSpacesEval = validatePasswordCriteria("        ");
+  assert.equal(allSpacesEval.nonSpaceLength, 0);
+  assert.equal(allSpacesEval.isMinLength, false);
+  assert.equal(allSpacesEval.isValid, false);
+
+  // Password with space cannot proceed (isValid is false) even if other criteria are met: "#I CCt4228"
+  const passwordWithSpace = validatePasswordCriteria("#I CCt4228");
+  assert.equal(passwordWithSpace.nonSpaceLength, 9);
+  assert.equal(passwordWithSpace.isMinLength, true, "Spaces are not counted, so 9 non-spaces >= 8");
+  assert.equal(passwordWithSpace.hasUppercase, true);
+  assert.equal(passwordWithSpace.hasLowercase, true);
+  assert.equal(passwordWithSpace.hasNumber, true);
+  assert.equal(passwordWithSpace.hasSpecialOnly, true);
+  assert.equal(passwordWithSpace.hasNoSpaces, false);
+  assert.equal(passwordWithSpace.isValid, false, "Cannot proceed if space is detected");
+
+  // Removing the space allows the password to proceed: "#ICCt4228"
+  const cleanPassword = validatePasswordCriteria("#ICCt4228");
+  assert.equal(cleanPassword.hasNoSpaces, true);
+  assert.equal(cleanPassword.isValid, true);
+
+  // 3. Special characters: Only !&#*_ are permitted
+  // Test valid special characters one by one
+  for (const char of ["!", "&", "#", "*", "_"]) {
+    const validRes = validatePasswordCriteria(`AdminPass1${char}`);
+    assert.equal(validRes.hasSpecial, true, `Expected ${char} to satisfy hasSpecial`);
+    assert.equal(validRes.hasSpecialOnly, true, `Expected ${char} to satisfy hasSpecialOnly`);
+    assert.equal(validRes.isValid, true, `Expected AdminPass1${char} to be completely valid`);
+  }
+
+  // Test invalid special characters like @, $, %, ^
+  for (const badChar of ["@", "$", "%", "^", "(", ")", "+", "=", "-", "?"]) {
+    const invalidRes = validatePasswordCriteria(`AdminPass1${badChar}`);
+    assert.equal(invalidRes.hasSpecial, false, `Expected ${badChar} to NOT satisfy allowed special characters`);
+    assert.equal(invalidRes.hasSpecialOnly, false, `Expected ${badChar} to fail hasSpecialOnly`);
+    assert.equal(invalidRes.isValid, false);
+  }
+
+  // Mixed allowed and disallowed special characters: "AdminPass1!@"
+  const mixedSpecial = validatePasswordCriteria("AdminPass1!@");
+  assert.equal(mixedSpecial.hasSpecial, true, "Has ! so hasSpecial is true");
+  assert.equal(mixedSpecial.hasSpecialOnly, false, "Has @ so hasSpecialOnly must be false (red)");
+  assert.equal(mixedSpecial.isValid, false);
+
+  // 4. Fully compliant password satisfies all criteria
+  const fullyValid = validatePasswordCriteria("SecurePass2026#");
+  assert.equal(fullyValid.isMinLength, true);
+  assert.equal(fullyValid.hasUppercase, true);
+  assert.equal(fullyValid.hasLowercase, true);
+  assert.equal(fullyValid.hasNumber, true);
+  assert.equal(fullyValid.hasSpecial, true);
+  assert.equal(fullyValid.hasSpecialOnly, true);
+  assert.equal(fullyValid.isValid, true);
 });

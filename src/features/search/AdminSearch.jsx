@@ -168,16 +168,6 @@ function AdminSearch() {
           ===================================================== */}
 
       <div className="admin-search-input-wrapper">
-
-
-        <span
-          className="admin-search-icon"
-          aria-hidden="true"
-        >
-          🔍
-        </span>
-
-
         <input
           type="text"
           className="admin-search-input"

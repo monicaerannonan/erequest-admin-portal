@@ -10,12 +10,13 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 
-import { db } from "../../firebase/firebaseConfig";
-import { addActivityLog } from "../dashboard/activityLogService";
+import { db } from "../../../firebase/firebaseConfig";
+import { addActivityLog } from "../../dashboard/activityLogService";
 import {
   buildTransactionId,
   createDocumentIfAbsent
-} from "../../utils/idUtils";
+} from "../../../utils/idUtils";
+import { withTimeout } from "../../../utils/asyncUtils";
 
 const TRANSACTIONS_COLLECTION = "transactions";
 const SERVICES_COLLECTION = "services";
@@ -26,8 +27,10 @@ const SERVICES_COLLECTION = "services";
    ========================================= */
 
 export async function getAllTransactions() {
-  const snapshot = await getDocs(
-    collection(db, TRANSACTIONS_COLLECTION)
+  const snapshot = await withTimeout(
+    getDocs(collection(db, TRANSACTIONS_COLLECTION)),
+    10000,
+    "Fetching transactions"
   );
 
   const transactions = snapshot.docs.map((document) => ({
@@ -36,7 +39,7 @@ export async function getAllTransactions() {
   }));
 
   transactions.sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "")
+    String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
   );
 
   return transactions;
@@ -58,7 +61,11 @@ export async function getTransactionById(transactionId) {
     transactionId
   );
 
-  const docSnap = await getDoc(docRef);
+  const docSnap = await withTimeout(
+    getDoc(docRef),
+    10000,
+    "Fetching transaction by ID"
+  );
 
   if (!docSnap.exists()) {
     return null;
@@ -76,8 +83,10 @@ export async function getTransactionById(transactionId) {
    ========================================= */
 
 export async function getActiveServices() {
-  const snapshot = await getDocs(
-    collection(db, SERVICES_COLLECTION)
+  const snapshot = await withTimeout(
+    getDocs(collection(db, SERVICES_COLLECTION)),
+    10000,
+    "Fetching active services"
   );
 
   const services = snapshot.docs
@@ -88,7 +97,7 @@ export async function getActiveServices() {
     .filter((service) => service.isActive === true);
 
   services.sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "")
+    String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
   );
 
   return services;

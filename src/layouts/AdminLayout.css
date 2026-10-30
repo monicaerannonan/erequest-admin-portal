@@ -33,21 +33,47 @@
 
   padding: 25px 15px 18px;
 
-  background:
-    linear-gradient(
-      180deg,
-      #173b65 0%,
-      #12355d 50%,
-      #102f53 100%
-    );
+  background: #0d223f;
+  overflow: hidden;
 
   color: #ffffff;
 
   box-shadow:
     4px 0 18px
-    rgba(17, 48, 84, 0.08);
+    rgba(13, 34, 63, 0.18);
 
   z-index: 1000;
+}
+
+/* ICCT Digital Seal Background Layer (70% opaque) */
+.admin-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("../assets/sidebar-bg.png");
+  background-size: cover;
+  background-position: center 38%;
+  background-repeat: no-repeat;
+  opacity: 0.70; /* Exactly 70% opaque as requested */
+  filter: brightness(1.08) contrast(1.1);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Smooth Gradient Overlay: eliminates hard edges, seamlessly blends with sidebar theme */
+.admin-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 34, 63, 0.82) 0%,
+    rgba(13, 34, 63, 0.40) 22%,
+    rgba(13, 34, 63, 0.32) 65%,
+    rgba(13, 34, 63, 0.85) 100%
+  );
+  z-index: 0;
+  pointer-events: none;
 }
 
 
@@ -56,6 +82,9 @@
    ========================================================= */
 
 .admin-sidebar-brand {
+  position: relative;
+  z-index: 1;
+
   display: flex;
   align-items: center;
 
@@ -106,10 +135,10 @@
 
 .admin-sidebar-brand-text strong {
   color: #ffffff;
-
+  font-family: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 17px;
   font-weight: 700;
-
+  letter-spacing: -0.02em;
   line-height: 1.3;
 }
 
@@ -129,6 +158,9 @@
    ========================================================= */
 
 .admin-sidebar-navigation {
+  position: relative;
+  z-index: 1;
+
   flex: 1;
 
   display: flex;
@@ -153,6 +185,7 @@
   padding: 10px 13px;
 
   border-radius: 8px;
+  border: 1px solid transparent;
 
   color: #d8e4f1;
 
@@ -162,8 +195,10 @@
   text-decoration: none;
 
   transition:
-    background 0.18s ease,
-    color 0.18s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s ease,
     transform 0.18s ease;
 }
 
@@ -173,22 +208,46 @@
     rgba(255, 255, 255, 0.08);
 
   color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 
+/* Futuristic Blue Neon Glow on Active Navigation Tab */
 .admin-nav-item.active {
   background:
     linear-gradient(
       135deg,
-      #2f80ed,
-      #3478dc
+      #2f80ed 0%,
+      #2563eb 100%
     );
 
   color: #ffffff;
+  font-weight: 600;
+
+  border-color: rgba(147, 197, 253, 0.45);
 
   box-shadow:
-    0 4px 12px
-    rgba(0, 0, 0, 0.13);
+    0 0 16px rgba(47, 128, 237, 0.50),
+    0 4px 14px rgba(10, 25, 47, 0.35);
+}
+
+.admin-nav-item.active:hover {
+  background:
+    linear-gradient(
+      135deg,
+      #3b82f6 0%,
+      #2563eb 100%
+    );
+
+  border-color: rgba(191, 219, 254, 0.65);
+
+  box-shadow:
+    0 0 22px rgba(59, 130, 246, 0.65),
+    0 4px 16px rgba(10, 25, 47, 0.40);
+}
+
+.admin-nav-item.active .admin-nav-icon svg {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
 }
 
 
@@ -215,6 +274,9 @@
    ========================================================= */
 
 .admin-sidebar-bottom {
+  position: relative;
+  z-index: 1;
+
   margin-top: auto;
 
   padding-top: 17px;
@@ -376,6 +438,8 @@
    ========================================================= */
 
 .admin-main-content {
+  position: relative;
+
   width:
     calc(100% - 245px);
 
@@ -386,6 +450,36 @@
   box-sizing: border-box;
 
   background: #f6f8fc;
+}
+
+/* =========================================================
+   STATIONARY ICCT SEAL WATERMARK (FROZEN ACROSS ALL ROUTES)
+   ========================================================= */
+
+.admin-portal-watermark {
+  position: fixed;
+  top: 0;
+  left: 245px;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.admin-portal-watermark-seal {
+  width: 520px;
+  height: 520px;
+  max-width: 55vw;
+  max-height: 55vw;
+  background-image: url("../assets/icct-seal.png");
+  background-size: contain;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0.03; /* Exactly 3% opacity */
+  pointer-events: none;
 }
 
 
@@ -427,6 +521,17 @@
     padding-right: 10px;
 
     font-size: 12px;
+  }
+
+  .admin-portal-watermark {
+    left: 205px;
+  }
+
+  .admin-portal-watermark-seal {
+    width: 420px;
+    height: 420px;
+    max-width: 60vw;
+    max-height: 60vw;
   }
 
 }
@@ -512,6 +617,17 @@
     padding:
       10px
       0;
+  }
+
+  .admin-portal-watermark {
+    left: 72px;
+  }
+
+  .admin-portal-watermark-seal {
+    width: 320px;
+    height: 320px;
+    max-width: 75vw;
+    max-height: 75vw;
   }
 
 }

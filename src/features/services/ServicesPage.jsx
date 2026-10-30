@@ -65,7 +65,7 @@ function ServicesPage() {
 
       const data = await getAllServices();
 
-      setServices(data);
+      setServices(data || []);
 
     } catch (error) {
       console.error(
@@ -74,7 +74,9 @@ function ServicesPage() {
       );
 
       setErrorMessage(
-        "Unable to load services. Please try again."
+        error.message?.includes("timed out")
+          ? "Connection timed out loading services. Please check your network connection."
+          : "Unable to load services. Please try again."
       );
 
     } finally {
@@ -91,7 +93,7 @@ function ServicesPage() {
         const data = await getAllServices();
 
         if (!ignore) {
-          setServices(data);
+          setServices(data || []);
         }
 
       } catch (error) {
@@ -102,7 +104,9 @@ function ServicesPage() {
 
         if (!ignore) {
           setErrorMessage(
-            "Unable to load services. Please try again."
+            error.message?.includes("timed out")
+              ? "Connection timed out loading services. Please check your network connection."
+              : "Unable to load services. Please try again."
           );
         }
 
@@ -301,14 +305,6 @@ function ServicesPage() {
 
               {/* CONTEXTUAL SEARCH BAR */}
               <div className="services-search-bar">
-
-                <span
-                  className="services-search-icon"
-                  aria-hidden="true"
-                >
-                  🔍
-                </span>
-
                 <input
                   type="text"
                   className="services-search-input"
@@ -382,6 +378,30 @@ function ServicesPage() {
             <p className="services-state-message">
               Loading services...
             </p>
+
+          ) : errorMessage && services.length === 0 ? (
+
+            <div className="services-state-message" style={{ textAlign: "center", padding: "24px 16px" }}>
+              <p style={{ color: "#d32f2f", marginBottom: "16px", fontWeight: "500" }}>
+                {errorMessage}
+              </p>
+              <button
+                type="button"
+                onClick={loadServices}
+                style={{
+                  padding: "8px 18px",
+                  background: "#1976d2",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600"
+                }}
+              >
+                Retry Loading
+              </button>
+            </div>
 
           ) : filteredServices.length === 0 ? (
 
