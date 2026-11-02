@@ -1,8 +1,59 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+function blankViewSourcePlugin() {
+  let lastHeartbeatAt = 0
+  let allowNextLoadUntil = Date.now() + 5000
+
+  return {
+    name: 'blank-view-source-plugin',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url || ''
+
+        if (url.startsWith('/__view_source_guard')) {
+          if (url.includes('action=unload')) {
+            lastHeartbeatAt = 0
+            allowNextLoadUntil = Date.now() + 5000
+          } else if (url.includes('action=active')) {
+            lastHeartbeatAt = Date.now()
+          }
+          res.statusCode = 204
+          res.end()
+          return
+        }
+
+        const isHtmlNavigation =
+          req.method === 'GET' &&
+          (url === '/' || url.startsWith('/?') || url.startsWith('/index.html')) &&
+          req.headers.accept &&
+          req.headers.accept.includes('text/html')
+
+        if (isHtmlNavigation) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+          const now = Date.now()
+          const clientIsActive = now - lastHeartbeatAt < 4500
+          const isReloading = now < allowNextLoadUntil
+
+          if (clientIsActive && !isReloading) {
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'text/html; charset=utf-8')
+            res.end('')
+            return
+          }
+
+          // Consume the reload allowance once used
+          allowNextLoadUntil = 0
+        }
+
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig(({ command, mode }) => ({
-  plugins: [react()],
+  plugins: [react(), blankViewSourcePlugin()],
   base: command === 'build' || mode === 'production' ? '/erequest-admin-portal/' : '/',
   build: {
     rollupOptions: {

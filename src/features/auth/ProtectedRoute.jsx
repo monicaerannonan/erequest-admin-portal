@@ -24,30 +24,12 @@ import {
 } from "./authService";
 
 import { AdminProfileProvider } from "../profile/AdminProfileProvider";
+import VaultModal from "../vault/VaultModal";
 
 
+// Only a REAL Firebase Auth session is accepted. A locally-stored/fake session would pass this
+// guard but Firestore rules would deny every read, leaving the portal empty.
 function getStoredLocalAuth() {
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "::1");
-
-  if (!isLocalhost) return null;
-
-  try {
-    const raw =
-      typeof sessionStorage !== "undefined" &&
-      sessionStorage.getItem("erequest_admin_auth_session");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.authenticated) {
-        return { email: parsed.email, uid: parsed.uid };
-      }
-    }
-  } catch {
-    return null;
-  }
   return null;
 }
 
@@ -99,7 +81,7 @@ function ProtectedRoute() {
           const adminRef = doc(
             db,
             "admins",
-            user.uid
+            activeUser.uid
           );
 
 
@@ -147,7 +129,7 @@ function ProtectedRoute() {
 
 
     const handlePageShow = (event) => {
-      if (event.persisted && !auth.currentUser) {
+      if (event.persisted && !auth.currentUser && !getStoredLocalAuth()) {
         setIsAuthorized(false);
         setLoading(false);
       }
@@ -201,6 +183,7 @@ function ProtectedRoute() {
 
   return (
     <AdminProfileProvider userId={auth.currentUser?.uid || effectiveUser?.uid}>
+      <VaultModal />
       <Outlet />
     </AdminProfileProvider>
   );

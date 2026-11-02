@@ -5,7 +5,9 @@ import {
   formatStudentLogDate,
   formatStudentLogTime,
   getAllStudentActivityLogs,
-  subscribeToStudentActivityLogs
+  subscribeToStudentActivityLogs,
+  formatDeviceNameDisplay,
+  formatOsVersionDisplay
 } from "./studentLogService";
 import { useVault } from "../vault/VaultContext";
 
@@ -166,20 +168,21 @@ function StudentActivityLogsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [fetchLimit, setFetchLimit] = useState(200);
   const [copiedId, setCopiedId] = useState("");
   const [openDropdownRowId, setOpenDropdownRowId] = useState("");
 
-  /* Decrypt encrypted fields in real time */
+  /* Decrypt encrypted fields in real time automatically */
   useEffect(() => {
     let active = true;
     async function decryptAll() {
       const map = {};
       for (const log of logs) {
         if (log.deviceName && String(log.deviceName).startsWith("enc:v1:")) {
-          map[log.deviceName] = await decryptText(log.deviceName);
+          map[log.deviceName] = await decryptText(log.deviceName, log.deviceName);
         }
         if (log.osVersion && String(log.osVersion).startsWith("enc:v1:")) {
-          map[log.osVersion] = await decryptText(log.osVersion);
+          map[log.osVersion] = await decryptText(log.osVersion, log.osVersion);
         }
       }
       if (active) {
@@ -236,7 +239,8 @@ function StudentActivityLogsPage() {
           setErrorMessage("Unable to load student activity logs right now.");
           setLoading(false);
         }
-      }
+      },
+      { maxLimit: fetchLimit }
     );
 
     return () => {
@@ -245,13 +249,13 @@ function StudentActivityLogsPage() {
         unsubscribe();
       }
     };
-  }, []);
+  }, [fetchLimit]);
 
   const handleRetryLoad = async () => {
     try {
       setLoading(true);
       setErrorMessage("");
-      const freshLogs = await getAllStudentActivityLogs();
+      const freshLogs = await getAllStudentActivityLogs({ maxLimit: fetchLimit });
       setLogs(freshLogs);
     } catch (error) {
       console.error("Retry loading student logs failed:", error);
@@ -326,8 +330,14 @@ function StudentActivityLogsPage() {
           )
         : false;
 
-      const resolvedDevice = (decryptedMap[item.deviceName] || item.deviceName).toLowerCase();
-      const resolvedOs = (decryptedMap[item.osVersion] || item.osVersion).toLowerCase();
+      const resolvedDevice = formatDeviceNameDisplay(
+        decryptedMap[item.deviceName] || item.deviceName,
+        item.fallbackDeviceName
+      ).toLowerCase();
+      const resolvedOs = formatOsVersionDisplay(
+        decryptedMap[item.osVersion] || item.osVersion,
+        item.fallbackOsVersion
+      ).toLowerCase();
 
       return (
         item.studentNumber.toLowerCase().includes(cleanQuery) ||
@@ -363,14 +373,23 @@ function StudentActivityLogsPage() {
      ========================================================= */
 
   const renderUpdatedStudentBadge = (log) => {
-    const accounts =
+    const rawAccounts =
       Array.isArray(log.loggedStudentNumbers) &&
       log.loggedStudentNumbers.length > 0
         ? log.loggedStudentNumbers
         : [log.currentStudentNumber || "—"];
 
+    // Strictly enforce maximum 3 accounts per device display (never 4 or 5)
+    const validAccounts = rawAccounts
+      .filter((id) => id && id !== "—")
+      .slice(0, MAX_ACCOUNT_SWITCHES_PER_DEVICE);
+    const accounts = validAccounts.length > 0 ? validAccounts : [rawAccounts[0] || "—"];
+
     const mostRecentId = accounts[0] || log.currentStudentNumber || "—";
-    const totalAccountsOnPhone = accounts.filter((id) => id && id !== "—").length;
+    const totalAccountsOnPhone = Math.min(
+      MAX_ACCOUNT_SWITCHES_PER_DEVICE,
+      accounts.filter((id) => id && id !== "—").length
+    );
     const isDropdownOpen = openDropdownRowId === log.id;
 
     let badgeToneClass = "active-id-normal";
@@ -608,17 +627,42 @@ function StudentActivityLogsPage() {
             </button>
           </div>
 
-          <div className="student-logs-search-box">
-            <span className="student-logs-search-icon">
-              <SearchIcon />
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Search Student #, Updated ID, Device, or UUID..."
-              aria-label="Search student activity logs"
-            />
+          <div className="student-logs-toolbar-actions">
+            <div className="student-logs-limit-box">
+              <label htmlFor="studentLogsFetchLimit" className="student-logs-limit-label">
+                Limit:
+              </label>
+              <select
+                id="studentLogsFetchLimit"
+                className="student-logs-limit-select"
+                value={fetchLimit}
+                onChange={(e) => {
+                  setFetchLimit(Number(e.target.value));
+                  setLoading(true);
+                  setCurrentPage(1);
+                }}
+                aria-label="Server query limit for student activity logs"
+              >
+                <option value="50">50 latest</option>
+                <option value="100">100 latest</option>
+                <option value="200">200 latest</option>
+                <option value="500">500 latest</option>
+                <option value="0">All records</option>
+              </select>
+            </div>
+
+            <div className="student-logs-search-box">
+              <span className="student-logs-search-icon">
+                <SearchIcon />
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search Student #, Updated ID, Device, or UUID..."
+                aria-label="Search student activity logs"
+              />
+            </div>
           </div>
         </div>
 
@@ -694,11 +738,22 @@ function StudentActivityLogsPage() {
                         {/* 3. DEVICE NAME */}
                         <td>
                           <div className="student-device-name">
-                            {decryptedMap[log.deviceName] || log.deviceName}
+                            {formatDeviceNameDisplay(
+                              decryptedMap[log.deviceName] || log.deviceName,
+                              log.fallbackDeviceName
+                            )}
                           </div>
-                          {log.osVersion && (
+                          {Boolean(
+                            formatOsVersionDisplay(
+                              decryptedMap[log.osVersion] || log.osVersion,
+                              log.fallbackOsVersion
+                            )
+                          ) && (
                             <div className="student-cell-subtext">
-                              {decryptedMap[log.osVersion] || log.osVersion}
+                              {formatOsVersionDisplay(
+                                decryptedMap[log.osVersion] || log.osVersion,
+                                log.fallbackOsVersion
+                              )}
                             </div>
                           )}
                         </td>

@@ -47,6 +47,7 @@ import StudentActivityLogsPage
 
 import VaultProvider from "./features/vault/VaultProvider";
 import VaultModal from "./features/vault/VaultModal";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function RouteLoadingFallback() {
   return (
@@ -71,13 +72,15 @@ function App() {
 
     <HashRouter>
 
-      <VaultProvider>
+      <ErrorBoundary>
 
-        <VaultModal />
+        <VaultProvider>
 
-        <Suspense fallback={<RouteLoadingFallback />}>
+          <VaultModal />
 
-      <Routes>
+          <Suspense fallback={<RouteLoadingFallback />}>
+
+        <Routes>
 
 
         {/* =====================================================
@@ -256,6 +259,8 @@ function App() {
       </Suspense>
 
       </VaultProvider>
+
+      </ErrorBoundary>
 
     </HashRouter>
 

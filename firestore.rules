@@ -9,7 +9,7 @@ service cloud.firestore {
     // Collection: admins
     // Document ID: {userId} (Firebase Auth UID of administrator)
     // Fields:
-    //   - name: string (required, 2-100 chars) - Full name of administrator
+    //   - name: string (required, 2-500 chars) - Full name of administrator (expanded for encrypted ciphertext)
     //   - position: string (required, 2-500 chars) - Role/position designation (expanded for encrypted ciphertext)
     //   - department: string (required, 2-500 chars) - Office/department assignment (expanded for encrypted ciphertext)
     //   - email: string (required, 5-150 chars, valid email format) - Admin email
@@ -56,11 +56,11 @@ service cloud.firestore {
     //   - transactionId: string (required, 1-100 chars) - Parent transaction identifier
     //   - stepNumber: number (required, >= 1) - Sequential step number
     //   - instruction: string (required, 1-6000 chars) - Step walkthrough text (expanded for encrypted ciphertext)
-    //   - remoteImageUrl: string (optional, 0-1000 chars) - Public image URL
+    //   - remoteImageUrl: string (optional, 0-2000 chars) - Public image URL (expanded for encrypted ciphertext)
     //   - localImagePath: string (optional, 0-500 chars) - Local asset path
     //   - imageCaption: string (optional, 0-1500 chars) - Image caption (expanded for encrypted ciphertext)
     //   - websiteName: string (optional, 0-1000 chars) - External reference title (expanded for encrypted ciphertext)
-    //   - websiteUrl: string (optional, 0-1000 chars) - External link URL
+    //   - websiteUrl: string (optional, 0-2000 chars) - External link URL (expanded for encrypted ciphertext)
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
@@ -92,15 +92,15 @@ service cloud.firestore {
     // Fields:
     //   - type: string (required, 1-50 chars) - Entity type (service, transaction, etc.)
     //   - action: string (required, 1-50 chars) - Action taken (added, updated, deleted, etc.)
-    //   - title: string (required, 1-200 chars) - Name of altered record
+    //   - title: string (required, 1-1000 chars) - Name of altered record (expanded for encrypted ciphertext)
     //   - description: string (optional, 0-6000 chars) - Action summary (expanded for encrypted ciphertext)
     //   - details: string (optional, 0-6000 chars) - Detailed description (expanded for encrypted ciphertext)
-    //   - parentName: string (optional, 0-200 chars) - Parent entity name
+    //   - parentName: string (optional, 0-1000 chars) - Parent entity name (expanded for encrypted ciphertext)
     //   - parentId: string (optional, 0-100 chars) - Parent entity ID
     //   - recordId: string (optional, 0-100 chars) - Altered record ID
-    //   - adminEmail: string (optional, 0-150 chars) - Admin user email
+    //   - adminEmail: string (optional, 0-500 chars) - Admin user email (expanded for encrypted ciphertext)
     //   - adminUid: string (optional, 0-100 chars) - Admin user UID
-    //   - adminName: string (optional, 0-100 chars) - Admin user display name
+    //   - adminName: string (optional, 0-500 chars) - Admin user display name (expanded for encrypted ciphertext)
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string) - Creation timestamp
     //   - timestamp: timestamp | number | string (optional, max 50 chars if string) - Event timestamp
     //   (Note: at least one of createdAt or timestamp is required)
@@ -144,7 +144,7 @@ service cloud.firestore {
     //   - campusCode: string (required, 'AU'|'BI'|'CA'|'CO'|'SA'|'SU'|'TA'|'XX', immutable) - ICCT campus code
     //   - enrollmentYear: string (required, 4 digits ^[0-9]{4}$, immutable) - Enrollment year
     //   - studentDigits: string (required, 5 digits ^[0-9]{5}$, immutable) - 5-digit student identifier
-    //   - email: string (required, 5-150 chars, valid email format, immutable for non-admins) - Registered OTP email
+    //   - email: string (required, either 5-150 chars valid email format OR 'enc:v1:<base64 iv>:<base64 ciphertext>' up to 500 chars, immutable for non-admins) - Registered OTP email (plaintext or encrypted ciphertext)
     //   - pinHash: string (required, 64 hex chars ^[0-9a-fA-F]{64}$) - PBKDF2-HMAC-SHA256 4-digit PIN hash
     //   - pinSalt: string (required, 32 hex chars ^[0-9a-fA-F]{32}$) - 16-byte random hex salt
     //   - status: string (required, 'active' | 'blocked') - Account status
@@ -289,7 +289,7 @@ service cloud.firestore {
     function isValidAdmin(data) {
       return hasOnlyAllowedFields(['name', 'position', 'department', 'phone', 'photoUrl', 'email', 'role', 'updatedAt', 'createdAt']) &&
         hasRequiredFields(['name', 'position', 'department', 'email', 'role', 'updatedAt']) &&
-        data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 500 &&
         data.position is string && data.position.size() >= 2 && data.position.size() <= 500 &&
         data.department is string && data.department.size() >= 2 && data.department.size() <= 500 &&
         data.email is string && isValidEmail(data.email) &&
@@ -355,11 +355,11 @@ service cloud.firestore {
         data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 100 &&
         data.stepNumber is number && data.stepNumber >= 1 &&
         data.instruction is string && data.instruction.size() >= 1 && data.instruction.size() <= 6000 &&
-        (!('remoteImageUrl' in data) || (data.remoteImageUrl is string && data.remoteImageUrl.size() <= 1000)) &&
+        (!('remoteImageUrl' in data) || (data.remoteImageUrl is string && data.remoteImageUrl.size() <= 2000)) &&
         (!('localImagePath' in data) || (data.localImagePath is string && data.localImagePath.size() <= 500)) &&
         (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 1500)) &&
         (!('websiteName' in data) || (data.websiteName is string && data.websiteName.size() <= 1000)) &&
-        (!('websiteUrl' in data) || (data.websiteUrl is string && data.websiteUrl.size() <= 1000)) &&
+        (!('websiteUrl' in data) || (data.websiteUrl is string && data.websiteUrl.size() <= 2000)) &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
         (!('createdAt' in data) || isValidTimestampField(data.createdAt));
@@ -409,15 +409,15 @@ service cloud.firestore {
         hasRequiredFields(['type', 'action', 'title']) &&
         data.type is string && data.type.size() >= 1 && data.type.size() <= 50 &&
         data.action is string && data.action.size() >= 1 && data.action.size() <= 50 &&
-        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 1000 &&
         (!('description' in data) || (data.description is string && data.description.size() <= 6000)) &&
         (!('details' in data) || (data.details is string && data.details.size() <= 6000)) &&
-        (!('parentName' in data) || (data.parentName is string && data.parentName.size() <= 200)) &&
+        (!('parentName' in data) || (data.parentName is string && data.parentName.size() <= 1000)) &&
         (!('parentId' in data) || (data.parentId is string && data.parentId.size() <= 100)) &&
         (!('recordId' in data) || (data.recordId is string && data.recordId.size() <= 100)) &&
-        (!('adminEmail' in data) || (data.adminEmail is string && data.adminEmail.size() <= 150)) &&
+        (!('adminEmail' in data) || (data.adminEmail is string && data.adminEmail.size() <= 500)) &&
         (!('adminUid' in data) || (data.adminUid is string && data.adminUid.size() <= 100)) &&
-        (!('adminName' in data) || (data.adminName is string && data.adminName.size() <= 100)) &&
+        (!('adminName' in data) || (data.adminName is string && data.adminName.size() <= 500)) &&
         ('createdAt' in data || 'timestamp' in data) &&
         (!('createdAt' in data) || isValidTimestampField(data.createdAt)) &&
         (!('timestamp' in data) || isValidTimestampField(data.timestamp));
@@ -515,7 +515,14 @@ service cloud.firestore {
         data.studentDigits.size() == 5 &&
         data.studentDigits.matches('^[0-9]{5}$') &&
         data.studentNumber == (data.campusCode + '-' + data.enrollmentYear + '-' + data.studentDigits) &&
-        isValidEmail(data.email) &&
+        (
+          isValidEmail(data.email) ||
+          (
+            data.email is string &&
+            data.email.size() <= 500 &&
+            data.email.matches('^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$')
+          )
+        ) &&
         data.pinHash is string &&
         data.pinHash.size() == 64 &&
         data.pinHash.matches('^[0-9a-fA-F]{64}$') &&

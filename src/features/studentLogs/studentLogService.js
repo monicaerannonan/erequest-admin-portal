@@ -2,7 +2,9 @@ import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   getDocs,
-  onSnapshot
+  onSnapshot,
+  query,
+  limit
 } from "firebase/firestore";
 
 import { auth, db } from "../../firebase/firebaseConfig.js";
@@ -15,6 +17,7 @@ export const STUDENT_ACTIVITY_LOGS_COLLECTION = "student_activity_logs";
 export const STUDENTS_COLLECTION = "students";
 export const MAX_ACCOUNT_SWITCHES_PER_DEVICE = 3;
 export const MAX_DAILY_ACCOUNT_SWITCHES = 3; // Backward compatibility alias
+export const DEFAULT_STUDENT_LOGS_QUERY_LIMIT = 200;
 
 /* =========================================================
    PHILIPPINE TIMEZONE DATE HELPER (YYYY-MM-DD)
@@ -56,6 +59,24 @@ export function normalizeStudentNumberKey(value) {
     return "";
   }
   return clean;
+}
+
+export function formatDeviceNameDisplay(val, fallback = "") {
+  if (!val) return fallback || "Unknown Device";
+  const str = String(val).trim();
+  if (str.startsWith("enc:v1:") || str === "🔒 [Encrypted]") {
+    return fallback || "Android Device";
+  }
+  return str;
+}
+
+export function formatOsVersionDisplay(val, fallback = "") {
+  if (!val) return fallback || "";
+  const str = String(val).trim();
+  if (str.startsWith("enc:v1:") || str === "🔒 [Encrypted]") {
+    return fallback || "";
+  }
+  return str;
 }
 
 /* =========================================================
@@ -100,16 +121,28 @@ export function normalizeStudentActivityLog(id, data = {}) {
     : [];
 
   // Ordered with the most recently opened account at index 0, followed by all saved accounts on this phone
+  // Strictly bounded to maximum 3 accounts per device (never 4 or 5)
   const loggedStudentNumbers = dedupeStudentIdsPreserveOrder([
     currentStudentNumber,
     ...rawLoggedList,
     ...rawDailyList,
     ...rawExtraList,
     studentNumber
-  ]);
+  ]).slice(0, MAX_ACCOUNT_SWITCHES_PER_DEVICE);
 
-  const deviceName = String(data.deviceName || "Unknown Device").trim();
-  const osVersion = String(data.osVersion || "").trim();
+  const rawDeviceName = data.deviceName || data.deviceModel || data.model || data.device || "";
+  const rawModelFallback = data.deviceModel || data.model || data.device || "";
+  const fallbackDeviceName = (!String(data.deviceName || "").startsWith("enc:v1:") && data.deviceName)
+    ? data.deviceName
+    : (rawModelFallback || "Android Device");
+
+  const rawOsVersion = data.osVersion || data.os || data.androidVersion || "";
+  const fallbackOsVersion = (!String(data.osVersion || "").startsWith("enc:v1:") && data.osVersion)
+    ? data.osVersion
+    : (data.os || data.androidVersion || "");
+
+  const deviceName = String(rawDeviceName || "Unknown Device").trim();
+  const osVersion = String(rawOsVersion || "").trim();
   const installationId = String(data.installationId || id || "").trim();
 
   const parsedOpenCount = Number(data.openCount ?? 0);
@@ -152,7 +185,7 @@ export function normalizeStudentActivityLog(id, data = {}) {
   const dailyStudentNumbers = dedupeStudentIdsPreserveOrder([
     ...(isActiveToday && currentStudentNumber ? [currentStudentNumber] : []),
     ...rawDailyList
-  ]);
+  ]).slice(0, MAX_ACCOUNT_SWITCHES_PER_DEVICE);
 
   let status = "normal";
   if (switchCount >= MAX_ACCOUNT_SWITCHES_PER_DEVICE) {
@@ -179,6 +212,8 @@ export function normalizeStudentActivityLog(id, data = {}) {
     isDifferentActiveStudent,
     deviceName,
     osVersion,
+    fallbackDeviceName,
+    fallbackOsVersion,
     installationId: installationId || "—",
     openCount,
     switchCount,
@@ -200,10 +235,16 @@ function sortLogsNewestFirst(logs) {
    ONE-TIME FETCH ALL STUDENT ACTIVITY LOGS
    ========================================================= */
 
-export async function getAllStudentActivityLogs() {
+export async function getAllStudentActivityLogs(options = {}) {
+  const maxLimit =
+    typeof options === "number"
+      ? options
+      : (options?.maxLimit ?? DEFAULT_STUDENT_LOGS_QUERY_LIMIT);
+
   try {
     const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
-    const snapshot = await getDocs(logsRef);
+    const logsQuery = maxLimit > 0 ? query(logsRef, limit(maxLimit)) : logsRef;
+    const snapshot = await getDocs(logsQuery);
 
     const logs = snapshot.docs.map((docSnap) =>
       normalizeStudentActivityLog(docSnap.id, docSnap.data())
@@ -225,12 +266,18 @@ export async function getAllStudentActivityLogs() {
    REAL-TIME SUBSCRIPTION FOR STUDENT ACTIVITY LOGS
    Waits for / reacts to Firebase Auth state restoration so
    page reloads do not prematurely fail before auth hydrates.
+   Enforces server-side query limiting to protect Firestore read quotas.
    ========================================================= */
 
-export function subscribeToStudentActivityLogs(onUpdate, onError) {
+export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) {
   if (typeof onUpdate !== "function") {
     return () => {};
   }
+
+  const maxLimit =
+    typeof options === "number"
+      ? options
+      : (options?.maxLimit ?? DEFAULT_STUDENT_LOGS_QUERY_LIMIT);
 
   let snapshotUnsubscribe = null;
   let disposed = false;
@@ -250,9 +297,10 @@ export function subscribeToStudentActivityLogs(onUpdate, onError) {
 
     try {
       const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
+      const logsQuery = maxLimit > 0 ? query(logsRef, limit(maxLimit)) : logsRef;
 
       snapshotUnsubscribe = onSnapshot(
-        logsRef,
+        logsQuery,
         (snapshot) => {
           if (disposed) {
             return;

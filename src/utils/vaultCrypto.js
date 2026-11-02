@@ -147,49 +147,95 @@ export async function getCatalogCryptoKey() {
 
 /**
  * Encrypts a catalog field (services, transactions, requirements, etc.)
- * using the deterministic catalog encryption key.
+ * using the deterministic catalog encryption key (shared with the Student Android app).
+ * Pass { forceEncrypt: false } only if a field must intentionally stay plain text.
  */
-export async function encryptCatalogField(text) {
+export async function encryptCatalogField(text, { forceEncrypt = true } = {}) {
   if (text === null || text === undefined) return text;
+  if (!forceEncrypt) {
+    return String(text);
+  }
   const catalogKey = await getCatalogCryptoKey();
   return await encryptVaultField(text, catalogKey);
 }
 
 export const catalogDecryptedCache = new Map();
 
+let activeMasterCryptoKey = null;
+const masterKeyListeners = new Set();
+
+export function setActiveMasterCryptoKey(key) {
+  activeMasterCryptoKey = key;
+  if (!key) {
+    catalogDecryptedCache.clear();
+  }
+  for (const listener of masterKeyListeners) {
+    try {
+      listener(key);
+    } catch {
+      // Ignore listener error
+    }
+  }
+}
+
+export function getActiveMasterCryptoKey() {
+  return activeMasterCryptoKey;
+}
+
+export function onMasterCryptoKeyChange(listener) {
+  if (typeof listener !== "function") return () => {};
+  masterKeyListeners.add(listener);
+  return () => {
+    masterKeyListeners.delete(listener);
+  };
+}
+
 /**
- * Decrypts a catalog field (services, transactions, requirements, admin position/dept, etc.)
- * using the deterministic catalog encryption key.
- * If not encrypted or if decryption fails, returns original text.
+ * Decrypts a catalog field (services, transactions, requirements, device names, admin position/dept, etc.)
+ * using the deterministic catalog encryption key or active master vault key.
+ * If not encrypted or if decryption fails, returns original text or fallbackPlaceholder.
  */
-export async function decryptCatalogField(ciphertext) {
+export async function decryptCatalogField(ciphertext, fallbackPlaceholder = null) {
   if (ciphertext === null || ciphertext === undefined) return ciphertext;
   const str = String(ciphertext);
   if (!str.startsWith(CIPHER_PREFIX)) return str;
   if (catalogDecryptedCache.has(str)) {
     return catalogDecryptedCache.get(str);
   }
-  const catalogKey = await getCatalogCryptoKey();
-  let decrypted = await decryptVaultField(str, catalogKey, str);
-  if (decrypted && !decrypted.startsWith(CIPHER_PREFIX)) {
-    catalogDecryptedCache.set(str, decrypted);
-    return decrypted;
+
+  const isValidDecrypted = (val) =>
+    Boolean(val && val !== "🔒 [Encrypted]" && !val.startsWith(CIPHER_PREFIX));
+
+  // 1. Try deterministic catalog key
+  try {
+    const catalogKey = await getCatalogCryptoKey();
+    const decrypted = await decryptVaultField(str, catalogKey, null);
+    if (isValidDecrypted(decrypted)) {
+      catalogDecryptedCache.set(str, decrypted);
+      return decrypted;
+    }
+  } catch {
+    // Continue
   }
-  // Fallback: If ciphertext was encrypted with Master Key (e.g. from prior migration), try session vault key
+
+  // 2. Fallback: Try session vault key or active master crypto key
   try {
     const sessionKey = await loadVaultKeyFromSession();
-    if (sessionKey) {
-      const vaultDecrypted = await decryptVaultField(str, sessionKey, str);
-      if (vaultDecrypted && !vaultDecrypted.startsWith(CIPHER_PREFIX)) {
-        catalogDecryptedCache.set(str, vaultDecrypted);
+    const candidateKey = sessionKey || activeMasterCryptoKey;
+    if (candidateKey) {
+      const vaultDecrypted = await decryptVaultField(str, candidateKey, null);
+      if (isValidDecrypted(vaultDecrypted)) {
         return vaultDecrypted;
       }
     }
   } catch {
     // Continue
   }
-  return decrypted;
+
+  return fallbackPlaceholder ?? str;
 }
+
+export const decryptAnyField = decryptCatalogField;
 
 /**
  * Derives a CryptoKey from an Emergency Recovery Key string.
@@ -256,7 +302,16 @@ export async function decryptVaultField(cipherText, cryptoKey, fallbackPlacehold
     return strValue; // Unencrypted legacy data
   }
 
-  if (!cryptoKey) {
+  let effectiveKey = cryptoKey || activeMasterCryptoKey;
+  if (!effectiveKey) {
+    try {
+      effectiveKey = await loadVaultKeyFromSession();
+    } catch {
+      effectiveKey = null;
+    }
+  }
+
+  if (!effectiveKey) {
     return fallbackPlaceholder ?? "🔒 [Encrypted]";
   }
 
@@ -275,7 +330,7 @@ export async function decryptVaultField(cipherText, cryptoKey, fallbackPlacehold
         name: AES_ALGO,
         iv: iv
       },
-      cryptoKey,
+      effectiveKey,
       cipherBytes
     );
 
@@ -323,18 +378,35 @@ export async function verifyCanary(canaryCiphertext, cryptoKey) {
 const SESSION_STORAGE_VAULT_KEY = "erequest_admin_vault_raw_key";
 
 export async function saveVaultKeyToSession(cryptoKey) {
+  if (!cryptoKey) {
+    return;
+  }
   try {
     const exported = await getCrypto().subtle.exportKey("raw", cryptoKey);
     const base64 = uint8ArrayToBase64(new Uint8Array(exported));
-    sessionStorage.setItem(SESSION_STORAGE_VAULT_KEY, base64);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(SESSION_STORAGE_VAULT_KEY, base64);
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(SESSION_STORAGE_VAULT_KEY, base64);
+    }
   } catch (err) {
-    console.warn("[VaultCrypto] Unable to cache key to sessionStorage:", err);
+    console.warn("[VaultCrypto] Unable to cache key to storage:", err);
   }
 }
 
 export async function loadVaultKeyFromSession() {
   try {
-    const base64 = sessionStorage.getItem(SESSION_STORAGE_VAULT_KEY);
+    let base64 = null;
+    if (typeof sessionStorage !== "undefined") {
+      base64 = sessionStorage.getItem(SESSION_STORAGE_VAULT_KEY);
+    }
+    if (!base64 && typeof localStorage !== "undefined") {
+      base64 = localStorage.getItem(SESSION_STORAGE_VAULT_KEY);
+      if (base64 && typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(SESSION_STORAGE_VAULT_KEY, base64);
+      }
+    }
     if (!base64) {
       return null;
     }
@@ -347,15 +419,20 @@ export async function loadVaultKeyFromSession() {
       ["encrypt", "decrypt"]
     );
   } catch (err) {
-    console.warn("[VaultCrypto] Unable to restore key from sessionStorage:", err);
+    console.warn("[VaultCrypto] Unable to restore key from storage:", err);
     return null;
   }
 }
 
 export function clearVaultKeyFromSession() {
   try {
-    sessionStorage.removeItem(SESSION_STORAGE_VAULT_KEY);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(SESSION_STORAGE_VAULT_KEY);
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(SESSION_STORAGE_VAULT_KEY);
+    }
   } catch (err) {
-    console.warn("[VaultCrypto] Error clearing session key:", err);
+    console.warn("[VaultCrypto] Error clearing storage key:", err);
   }
 }

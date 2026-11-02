@@ -13,8 +13,15 @@ import {
   decryptVaultField,
   generateCanary,
   verifyCanary,
+  setActiveMasterCryptoKey,
   CIPHER_PREFIX
 } from "../src/utils/vaultCrypto.js";
+import {
+  formatDeviceNameDisplay,
+  formatOsVersionDisplay,
+  normalizeStudentActivityLog,
+  MAX_ACCOUNT_SWITCHES_PER_DEVICE
+} from "../src/features/studentLogs/studentLogService.js";
 
 test("generateRandomSalt generates 32 hex characters (16 bytes)", () => {
   const salt = generateRandomSalt(16);
@@ -91,15 +98,19 @@ test("getCatalogCryptoKey encrypts and decrypts catalog text consistently", asyn
   assert.equal(decrypted, sampleRequirement);
 });
 
-test("encryptCatalogField and decryptCatalogField roundtrip correctly", async () => {
+test("encryptCatalogField encrypts by default and roundtrips with the catalog key", async () => {
   const serviceName = "Registrar Services - Transcript of Records";
-  const encrypted = await encryptCatalogField(serviceName);
 
+  const encrypted = await encryptCatalogField(serviceName);
   assert.ok(encrypted.startsWith(CIPHER_PREFIX));
   assert.notEqual(encrypted, serviceName);
 
   const decrypted = await decryptCatalogField(encrypted);
   assert.equal(decrypted, serviceName);
+
+  // Explicit opt-out keeps plain text
+  const plain = await encryptCatalogField(serviceName, { forceEncrypt: false });
+  assert.equal(plain, serviceName);
 });
 
 test("decryptCatalogField handles plaintext legacy input gracefully", async () => {
@@ -127,3 +138,115 @@ test("checkIfMasterPassword detects default master password and rejects normal p
 
   await terminate(db).catch(() => {});
 });
+
+test("formatDeviceNameDisplay and formatOsVersionDisplay handle plaintext, encrypted, and placeholders cleanly", () => {
+  // Plaintext display
+  assert.equal(formatDeviceNameDisplay("Samsung Galaxy A53"), "Samsung Galaxy A53");
+  assert.equal(formatOsVersionDisplay("Android 13"), "Android 13");
+
+  // Ciphertext fallback
+  assert.equal(formatDeviceNameDisplay("enc:v1:abc1234:xyz7890"), "Android Device");
+  assert.equal(formatOsVersionDisplay("enc:v1:abc1234:xyz7890"), "");
+
+  // Placeholder fallback
+  assert.equal(formatDeviceNameDisplay("🔒 [Encrypted]"), "Android Device");
+  assert.equal(formatOsVersionDisplay("🔒 [Encrypted]"), "");
+
+  // Empty / null fallback
+  assert.equal(formatDeviceNameDisplay(""), "Unknown Device");
+  assert.equal(formatDeviceNameDisplay(null), "Unknown Device");
+  assert.equal(formatOsVersionDisplay(""), "");
+  assert.equal(formatOsVersionDisplay(null), "");
+});
+
+test("decryptCatalogField decrypts ciphertext encrypted with active master key seamlessly", async () => {
+  const salt = generateRandomSalt();
+  const masterKey = await deriveKeyFromPassword("MasterKey2026#", salt);
+  setActiveMasterCryptoKey(masterKey);
+
+  const deviceName = "Xiaomi Poco X4 Pro 5G";
+  const encrypted = await encryptVaultField(deviceName, masterKey);
+  assert.ok(encrypted.startsWith(CIPHER_PREFIX));
+
+  const decrypted = await decryptCatalogField(encrypted);
+  assert.equal(decrypted, deviceName);
+});
+
+test("Student Activity Logs strictly enforces maximum 3 accounts per device (never 4 or 5)", () => {
+  assert.equal(MAX_ACCOUNT_SWITCHES_PER_DEVICE, 3);
+
+  // Raw data containing 5 accounts on a single phone
+  const rawDataWith5Accounts = {
+    studentNumber: "AU-2023-00001",
+    currentStudentNumber: "AU-2023-00005",
+    loggedStudentNumbers: [
+      "AU-2023-00005",
+      "AU-2023-00004",
+      "AU-2023-00003",
+      "AU-2023-00002",
+      "AU-2023-00001"
+    ],
+    studentNumbers: [
+      "AU-2023-00005",
+      "AU-2023-00004",
+      "AU-2023-00003",
+      "AU-2023-00002",
+      "AU-2023-00001"
+    ],
+    dailyStudentNumbers: [
+      "AU-2023-00005",
+      "AU-2023-00004",
+      "AU-2023-00003",
+      "AU-2023-00002"
+    ],
+    deviceName: "Samsung Galaxy A53",
+    installationId: "device-uuid-12345"
+  };
+
+  const normalized = normalizeStudentActivityLog("device-uuid-12345", rawDataWith5Accounts);
+
+  // Must strictly contain 3 accounts, never 4 or 5
+  assert.equal(normalized.loggedStudentNumbers.length, 3);
+  assert.deepEqual(normalized.loggedStudentNumbers, [
+    "AU-2023-00005",
+    "AU-2023-00004",
+    "AU-2023-00003"
+  ]);
+  assert.equal(normalized.studentNumbers.length, 3);
+  assert.equal(normalized.dailyStudentNumbers.length, 3);
+});
+
+test("decryptCatalogField decrypts master-key data only when the master key is active (no password guessing)", async () => {
+  const salt = generateRandomSalt();
+  setActiveMasterCryptoKey(null);
+
+  const masterKey = await deriveKeyFromPassword("typed-master-password", salt);
+  const deviceName = "Infinix Zero 5G";
+  const cipher = await encryptVaultField(deviceName, masterKey);
+
+  // Master password not typed yet -> stays locked
+  const locked = await decryptCatalogField(cipher);
+  assert.equal(locked, cipher);
+
+  // Once the admin types the master password the key becomes active
+  setActiveMasterCryptoKey(masterKey);
+  const unlocked = await decryptCatalogField(cipher);
+  assert.equal(unlocked, deviceName);
+  setActiveMasterCryptoKey(null);
+});
+
+test("formatDeviceNameDisplay and formatOsVersionDisplay use fallback when provided", () => {
+  assert.equal(
+    formatDeviceNameDisplay("enc:v1:someciphertext", "Redmi Note 10 Pro"),
+    "Redmi Note 10 Pro"
+  );
+  assert.equal(
+    formatOsVersionDisplay("enc:v1:someciphertext", "Android 12"),
+    "Android 12"
+  );
+  assert.equal(
+    formatDeviceNameDisplay("🔒 [Encrypted]", "Samsung A12"),
+    "Samsung A12"
+  );
+});
+

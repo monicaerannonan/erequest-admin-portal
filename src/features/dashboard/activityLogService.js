@@ -67,29 +67,44 @@ export async function addActivityLog({
     DEFAULT_ADMIN_EMAIL
   ).trim();
 
+  const cleanParentName = String(parentName || "").trim();
+
+  let encryptedTitle = cleanTitle;
   let encryptedDescription = cleanDescription;
   let encryptedDetails = cleanDetails;
+  let encryptedParentName = cleanParentName;
+  let encryptedAdminEmail = resolvedEmail;
   try {
-    if (cleanDescription) {
-      encryptedDescription = await encryptCatalogField(cleanDescription);
-    }
-    if (cleanDetails) {
-      encryptedDetails = await encryptCatalogField(cleanDetails);
-    }
+    const enc = (value) =>
+      value ? encryptCatalogField(value, { forceEncrypt: true }) : value;
+    [
+      encryptedTitle,
+      encryptedDescription,
+      encryptedDetails,
+      encryptedParentName,
+      encryptedAdminEmail
+    ] = await Promise.all([
+      enc(cleanTitle),
+      enc(cleanDescription),
+      enc(cleanDetails),
+      enc(cleanParentName),
+      enc(resolvedEmail)
+    ]);
   } catch {
     // Fall back to clean strings if encryption is unavailable
   }
 
+  // Free-text fields are encrypted; type/action are system enums and the ids stay plain.
   const payload = {
     type: cleanType,
     action: cleanAction,
-    title: cleanTitle,
+    title: encryptedTitle,
     description: encryptedDescription,
     details: encryptedDetails,
-    parentName: String(parentName || "").trim(),
+    parentName: encryptedParentName,
     parentId: String(parentId || "").trim(),
     recordId: String(recordId || "").trim(),
-    adminEmail: resolvedEmail,
+    adminEmail: encryptedAdminEmail,
     createdAt: serverTimestamp(),
     timestamp: serverTimestamp()
   };
@@ -117,6 +132,32 @@ export async function addActivityLog({
    GET RECENT ACTIVITY LOGS (ONE-TIME FETCH)
    ========================================================= */
 
+/* Decrypts every encrypted free-text field of an activity log document */
+async function decryptActivityLogData(document) {
+  const data = document.data();
+  const [title, description, details, parentName, adminEmail, adminName] =
+    await Promise.all([
+      decryptCatalogField(data.title),
+      decryptCatalogField(data.description),
+      decryptCatalogField(data.details),
+      decryptCatalogField(data.parentName),
+      decryptCatalogField(data.adminEmail),
+      decryptCatalogField(data.adminName)
+    ]);
+  return {
+    id: document.id,
+    ...data,
+    title: title || data.title,
+    description: description || data.description,
+    details: details || data.details,
+    parentName: parentName ?? data.parentName,
+    adminEmail: adminEmail || data.adminEmail,
+    adminName: adminName ?? data.adminName,
+    createdAt: data.createdAt || data.timestamp || null,
+    timestamp: data.timestamp || data.createdAt || null
+  };
+}
+
 export async function getRecentActivityLogs(maxLogs = 5) {
   try {
     const activityLogsRef = collection(db, ACTIVITY_LOGS_COLLECTION);
@@ -129,21 +170,7 @@ export async function getRecentActivityLogs(maxLogs = 5) {
     const snapshot = await getDocs(recentActivitiesQuery);
 
     return await Promise.all(
-      snapshot.docs.map(async (document) => {
-        const data = document.data();
-        const [decDesc, decDetails] = await Promise.all([
-          decryptCatalogField(data.description),
-          decryptCatalogField(data.details)
-        ]);
-        return {
-          id: document.id,
-          ...data,
-          description: decDesc || data.description,
-          details: decDetails || data.details,
-          createdAt: data.createdAt || data.timestamp || null,
-          timestamp: data.timestamp || data.createdAt || null
-        };
-      })
+      snapshot.docs.map((document) => decryptActivityLogData(document))
     );
   } catch (err) {
     console.warn("Failed to fetch activity logs:", err?.message || err);
@@ -181,21 +208,7 @@ export function subscribeToRecentActivityLogs(
       async (snapshot) => {
         try {
           const logs = await Promise.all(
-            snapshot.docs.map(async (document) => {
-              const data = document.data();
-              const [decDesc, decDetails] = await Promise.all([
-                decryptCatalogField(data.description),
-                decryptCatalogField(data.details)
-              ]);
-              return {
-                id: document.id,
-                ...data,
-                description: decDesc || data.description,
-                details: decDetails || data.details,
-                createdAt: data.createdAt || data.timestamp || null,
-                timestamp: data.timestamp || data.createdAt || null
-              };
-            })
+            snapshot.docs.map((document) => decryptActivityLogData(document))
           );
           onUpdate(logs);
         } catch (processErr) {

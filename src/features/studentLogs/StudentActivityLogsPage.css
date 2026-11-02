@@ -219,9 +219,50 @@
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
+.student-logs-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.student-logs-limit-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f9fbfe;
+  border: 1px solid #d6e0ec;
+  border-radius: 9px;
+  padding: 0 10px;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.student-logs-limit-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  user-select: none;
+}
+
+.student-logs-limit-select {
+  border: none;
+  background: transparent;
+  color: #102544;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  padding: 4px 0;
+}
+
+.student-logs-limit-select:focus {
+  outline: none;
+}
+
 .student-logs-search-box {
   position: relative;
-  width: 340px;
+  width: 320px;
   max-width: 100%;
 }
 

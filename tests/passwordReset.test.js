@@ -55,7 +55,7 @@ import {
 
 test("Credentials & Constants: Matches specified admin defaults", () => {
   assert.equal(DEFAULT_ADMIN_EMAIL, "erequesticctadmin@gmail.com");
-  assert.equal(DEFAULT_ADMIN_PASSWORD, "#Icct4228");
+  assert.equal(DEFAULT_ADMIN_PASSWORD, "");
   assert.equal(EMAILJS_SERVICE_ID, "service_4rwr6df");
   assert.equal(EMAILJS_TEMPLATE_ID, "template_065t767");
   assert.equal(EMAILJS_PUBLIC_KEY, "iC0ESDFLUm8ZrV8q2");
@@ -340,7 +340,8 @@ test("Password Reset Execution: Updates active password and invalidates OTP", as
     }
   };
 
-  // Initial password
+  // Initial password (nothing hardcoded) -> latest password used on this browser
+  setActiveAdminPassword("#Icct4228");
   assert.equal(getActiveAdminPassword(), "#Icct4228");
 
   // Send OTP

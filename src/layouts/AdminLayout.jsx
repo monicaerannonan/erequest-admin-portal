@@ -8,7 +8,6 @@ import {
 
 import { logoutAdmin } from "../features/auth/authService";
 import { useAdminProfile } from "../features/profile/AdminProfileContext";
-import { useVault } from "../features/vault/VaultContext";
 
 import "./AdminLayout.css";
 
@@ -170,7 +169,6 @@ function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, initials } = useAdminProfile();
-  const { isVaultUnlocked, openVaultModal } = useVault();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
   const activeAvatarUrl = String(profile?.photoUrl || "").trim();
   const showAvatarPhoto = Boolean(
@@ -450,39 +448,6 @@ function AdminLayout() {
             </div>
 
           </NavLink>
-
-          {/* VAULT STATUS BUTTON */}
-          <div style={{ padding: "0 0.5rem 0.25rem 0.5rem" }}>
-            {isVaultUnlocked ? (
-              <button
-                type="button"
-                className="vault-status-badge-btn unlocked"
-                style={{ width: "100%", justifyContent: "center" }}
-                onClick={() => openVaultModal("manager")}
-                title="Security Vault Active (AES-256) - Click to manage or encrypt"
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                </svg>
-                <span>Vault Active</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="vault-status-badge-btn locked"
-                style={{ width: "100%", justifyContent: "center" }}
-                onClick={() => openVaultModal("unlock")}
-                title="Security Vault Locked - Click to unlock"
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <span>Vault Locked</span>
-              </button>
-            )}
-          </div>
 
           <button
             type="button"

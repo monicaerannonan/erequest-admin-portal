@@ -40,6 +40,7 @@ export default function VaultModal() {
   // Handle Setup
   const handleSetupSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
 
     if (password.length < 8) {
@@ -54,10 +55,17 @@ export default function VaultModal() {
     setLoading(true);
     try {
       const res = await setupMasterKey(password);
-      setGeneratedRecoveryKey(res.recoveryKey);
       if (res.cryptoKey) {
         setActiveSetupKey(res.cryptoKey);
+        try {
+          await encryptEntireDatabase(res.cryptoKey, (prog) => {
+            setMigrationProgress(prog);
+          });
+        } catch (migErr) {
+          console.warn("Initial setup encryption notice:", migErr);
+        }
       }
+      setGeneratedRecoveryKey(res.recoveryKey);
       setPassword("");
       setConfirmPassword("");
     } catch (err) {

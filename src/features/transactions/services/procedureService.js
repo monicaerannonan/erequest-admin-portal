@@ -42,7 +42,9 @@ export async function getAllProcedureSteps() {
         ...data,
         instruction: await decryptCatalogField(data.instruction),
         imageCaption: await decryptCatalogField(data.imageCaption),
-        websiteName: await decryptCatalogField(data.websiteName)
+        websiteName: await decryptCatalogField(data.websiteName),
+        remoteImageUrl: await decryptCatalogField(data.remoteImageUrl),
+        websiteUrl: await decryptCatalogField(data.websiteUrl)
       };
     })
   );
@@ -88,7 +90,9 @@ export async function getProcedureStepsByTransactionId(transactionId) {
         ...data,
         instruction: await decryptCatalogField(data.instruction),
         imageCaption: await decryptCatalogField(data.imageCaption),
-        websiteName: await decryptCatalogField(data.websiteName)
+        websiteName: await decryptCatalogField(data.websiteName),
+        remoteImageUrl: await decryptCatalogField(data.remoteImageUrl),
+        websiteUrl: await decryptCatalogField(data.websiteUrl)
       };
     })
   );
@@ -208,6 +212,8 @@ export async function addProcedureStep(
   const encryptedInstruction = await encryptCatalogField(cleanInstruction);
   const encryptedImageCaption = await encryptCatalogField(cleanImageCaption);
   const encryptedWebsiteName = await encryptCatalogField(cleanWebsiteName);
+  const encryptedRemoteImageUrl = await encryptCatalogField(cleanRemoteImageUrl);
+  const encryptedWebsiteUrl = await encryptCatalogField(cleanWebsiteUrl);
 
   await createDocumentIfAbsent(
     db,
@@ -217,11 +223,11 @@ export async function addProcedureStep(
       transactionId: cleanTransactionId,
       stepNumber: cleanStepNumber,
       instruction: encryptedInstruction,
-      remoteImageUrl: cleanRemoteImageUrl,
+      remoteImageUrl: encryptedRemoteImageUrl,
       localImagePath: cleanLocalImagePath,
       imageCaption: encryptedImageCaption,
       websiteName: encryptedWebsiteName,
-      websiteUrl: cleanWebsiteUrl,
+      websiteUrl: encryptedWebsiteUrl,
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -324,16 +330,18 @@ export async function updateProcedureStep(
   const encryptedInstruction = await encryptCatalogField(cleanInstruction);
   const encryptedImageCaption = await encryptCatalogField(cleanImageCaption);
   const encryptedWebsiteName = await encryptCatalogField(cleanWebsiteName);
+  const encryptedRemoteImageUrl = await encryptCatalogField(cleanRemoteImageUrl);
+  const encryptedWebsiteUrl = await encryptCatalogField(cleanWebsiteUrl);
 
   await updateDoc(procedureRef, {
     transactionId: cleanTransactionId,
     stepNumber: cleanStepNumber,
     instruction: encryptedInstruction,
-    remoteImageUrl: cleanRemoteImageUrl,
+    remoteImageUrl: encryptedRemoteImageUrl,
     localImagePath: cleanLocalImagePath,
     imageCaption: encryptedImageCaption,
     websiteName: encryptedWebsiteName,
-    websiteUrl: cleanWebsiteUrl,
+    websiteUrl: encryptedWebsiteUrl,
     updatedAt: serverTimestamp()
   });
 

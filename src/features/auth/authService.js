@@ -18,11 +18,14 @@ import {
 
 import {
   checkIfMasterPassword,
-  initializeVault
+  getVaultConfig,
+  DEFAULT_MASTER_PASSWORD
 } from "../vault/vaultService.js";
 import {
   saveVaultKeyToSession,
-  clearVaultKeyFromSession
+  clearVaultKeyFromSession,
+  deriveKeyFromPassword,
+  setActiveMasterCryptoKey
 } from "../../utils/vaultCrypto.js";
 
 export const DEFAULT_ADMIN_EMAIL =
@@ -30,10 +33,7 @@ export const DEFAULT_ADMIN_EMAIL =
     import.meta.env?.VITE_DEFAULT_ADMIN_EMAIL) ||
   "erequesticctadmin@gmail.com";
 
-export const DEFAULT_ADMIN_PASSWORD =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env?.VITE_DEFAULT_ADMIN_PASSWORD) ||
-  "#Icct4228";
+export const DEFAULT_ADMIN_PASSWORD = "";
 
 export const AUTHORIZED_ADMIN_EMAILS = [
   DEFAULT_ADMIN_EMAIL,
@@ -56,6 +56,7 @@ export const EMAILJS_PUBLIC_KEY =
   "iC0ESDFLUm8ZrV8q2";
 
 export const ACTIVE_PWD_KEY = "erequest_admin_active_pwd";
+export const PWD_HISTORY_KEY = "erequest_admin_pwd_history";
 export const OTP_STORAGE_KEY = "erequest_admin_otp_session";
 
 export const ALLOWED_SPECIAL_CHARS = "!&#*_";
@@ -120,7 +121,7 @@ export async function sendOfficialPasswordResetEmail(email) {
 
 /**
  * Retrieves the currently active admin password.
- * Defaults to the specified default password "#ICCT4228" if not reset.
+ * Returns the latest admin password used/reset on this browser (never a hardcoded value).
  */
 export function getActiveAdminPassword() {
   try {
@@ -134,12 +135,53 @@ export function getActiveAdminPassword() {
 }
 
 /**
- * Persists the newly confirmed admin password.
+ * Retrieves the stored history of admin passwords used on this browser.
+ */
+function getAdminPasswordHistory() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(PWD_HISTORY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p) => typeof p === "string" && p.length > 0);
+        }
+      }
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return [];
+}
+
+/**
+ * Returns ordered candidate passwords for internal Firebase Auth token/password synchronization
+ * (used only after OTP verification or when syncing an already-verified active/master password).
+ */
+function getCloudSyncPasswordCandidates(extraPasswords = []) {
+  const all = [
+    ...extraPasswords,
+    getActiveAdminPassword(),
+    ...getAdminPasswordHistory(),
+    DEFAULT_ADMIN_PASSWORD
+  ];
+  return all.filter((val, idx, arr) => Boolean(val) && arr.indexOf(val) === idx);
+}
+
+/**
+ * Persists the newly confirmed admin password while retaining previous passwords in history
+ * so cloud password synchronization never loses the prior Firebase Auth credential.
  */
 export function setActiveAdminPassword(newPassword) {
   try {
     if (typeof localStorage !== "undefined") {
+      const previous = localStorage.getItem(ACTIVE_PWD_KEY);
+      const history = getAdminPasswordHistory();
+      const updatedHistory = [newPassword, previous, ...history]
+        .filter((val, idx, arr) => Boolean(val) && arr.indexOf(val) === idx)
+        .slice(0, 10);
       localStorage.setItem(ACTIVE_PWD_KEY, newPassword);
+      localStorage.setItem(PWD_HISTORY_KEY, JSON.stringify(updatedHistory));
     }
   } catch (err) {
     console.warn("Could not save active admin password to local storage:", err);
@@ -161,11 +203,8 @@ export function isSameAsOlderPassword(newPassword, olderPassword = null) {
   if (newPassword === currentPassword) {
     return true;
   }
-  // If current password is default admin password, prevent casing variations like #ICCT4228 vs #Icct4228
-  if (
-    currentPassword.toLowerCase() === DEFAULT_ADMIN_PASSWORD.toLowerCase() &&
-    newPassword.toLowerCase() === DEFAULT_ADMIN_PASSWORD.toLowerCase()
-  ) {
+  // Prevent casing-only variations of the current password
+  if (newPassword.toLowerCase() === currentPassword.toLowerCase()) {
     return true;
   }
   return false;
@@ -382,6 +421,7 @@ export async function sendPasswordResetOTP(email) {
     hour12: true
   });
 
+  // 3. Dispatch OTP via EmailJS
   try {
     const payload = {
       service_id: serviceId,
@@ -431,6 +471,22 @@ export async function sendPasswordResetOTP(email) {
     email: cleanEmail,
     emailSent: true
   };
+}
+
+/**
+ * Sends an official Google Firebase password reset link directly to the admin email.
+ * This guarantees cloud-level recovery even if the old password was forgotten or EmailJS quota is exhausted.
+ */
+export async function sendDirectFirebaseResetEmail(email) {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    throw new Error("Admin email address is required.");
+  }
+  if (!AUTHORIZED_ADMIN_EMAILS.some((adm) => adm.toLowerCase() === cleanEmail)) {
+    throw new Error("Password reset is only authorized for designated administrator emails.");
+  }
+  await sendPasswordResetEmail(auth, cleanEmail);
+  return { success: true, email: cleanEmail };
 }
 
 /**
@@ -650,12 +706,7 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
   const apiKey = PRODUCTION_FIREBASE_CONFIG.apiKey;
   let firebaseUpdated = false;
 
-  const candidatePasswords = [
-    getActiveAdminPassword(),
-    DEFAULT_ADMIN_PASSWORD,
-    "#Icct4228",
-    "#ICCT4228"
-  ].filter(Boolean);
+  const candidatePasswords = getCloudSyncPasswordCandidates();
 
   try {
     // 2a. Sign in with candidate passwords to obtain active idToken
@@ -677,6 +728,10 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
         const signInData = await signInRes.json();
         if (signInData.idToken) {
           idToken = signInData.idToken;
+          break;
+        }
+        // Stop immediately if rate-limited so we don't extend the block
+        if (signInData?.error?.message?.includes("TOO_MANY_ATTEMPTS")) {
           break;
         }
       } catch {
@@ -735,6 +790,9 @@ export async function setNewAdminPassword(email, newPassword, confirmPassword) {
             );
             break;
           }
+          if (compData?.error?.message?.includes("TOO_MANY_ATTEMPTS")) {
+            break;
+          }
         } catch {
           // Continue
         }
@@ -773,183 +831,183 @@ export async function verifyAndResetPassword(
   return await setNewAdminPassword(email, newPassword, confirmPassword);
 }
 
+/**
+ * Tries each email/password pair against Firebase Auth. Stops immediately on
+ * auth/too-many-requests so we never aggravate the rate limit.
+ */
+async function signInWithCandidates(emails, passwords, skipPair = null) {
+  let lastError = null;
+  for (const targetEmail of emails) {
+    for (const pwd of passwords) {
+      if (
+        skipPair &&
+        skipPair.email === targetEmail &&
+        skipPair.password === pwd
+      ) {
+        continue;
+      }
+      try {
+        const credential = await signInWithEmailAndPassword(auth, targetEmail, pwd);
+        if (credential?.user) {
+          return { credential, error: null };
+        }
+      } catch (err) {
+        lastError = err;
+        if (err?.code === "auth/too-many-requests") {
+          return { credential: null, error: err };
+        }
+      }
+    }
+  }
+  return { credential: null, error: lastError };
+}
+
+
 // LOGIN + VERIFY ADMIN ROLE
 export async function loginAdmin(email, password) {
-  const cleanEmail = (email || "").trim();
-  const cleanPassword = password || "";
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const cleanPassword = (password || "").trim();
   const activePassword = getActiveAdminPassword();
   const isDesignatedAdmin =
-    cleanEmail.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+    cleanEmail === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
     AUTHORIZED_ADMIN_EMAILS.some(
-      (adm) => adm.toLowerCase() === cleanEmail.toLowerCase()
+      (adm) => adm.toLowerCase() === cleanEmail
     );
 
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "::1");
+  // Dual Password Check: Detect if entered password matches Master Password.
+  const isDefaultMasterTyped =
+    cleanPassword === DEFAULT_MASTER_PASSWORD ||
+    cleanPassword.toLowerCase() === DEFAULT_MASTER_PASSWORD.toLowerCase();
 
-  // Dual Password Check: Detect if entered password matches Master Password
-  let masterCheck = { isMaster: false };
+  let masterCheck;
   try {
-    masterCheck = await checkIfMasterPassword(cleanPassword);
+    masterCheck = await Promise.race([
+      checkIfMasterPassword(cleanPassword),
+      new Promise((resolve) =>
+        setTimeout(
+          () => resolve({ isMaster: isDefaultMasterTyped, isDefault: isDefaultMasterTyped }),
+          10000
+        )
+      )
+    ]);
   } catch {
-    // Non-blocking
+    masterCheck = { isMaster: isDefaultMasterTyped, isDefault: isDefaultMasterTyped };
   }
 
-  // 1. Sign in using Firebase Authentication directly with the entered password
-  let userCredential;
-  try {
-    userCredential = await signInWithEmailAndPassword(
-      auth,
-      cleanEmail,
-      cleanPassword
+  const isMasterEntered = Boolean(masterCheck.isMaster);
+
+  // Recognized designated admin passwords
+  const recognizedAdminPasswords = [
+    activePassword,
+    DEFAULT_ADMIN_PASSWORD,
+  ].filter(Boolean);
+
+  const isRecognizedPassword =
+    recognizedAdminPasswords.includes(cleanPassword) ||
+    recognizedAdminPasswords.some(
+      (p) => p.toLowerCase() === cleanPassword.toLowerCase()
     );
-    // When successful directly in Firebase:
-    // Only update active recent password if this was NOT the master password
-    if (!masterCheck.isMaster) {
-      setActiveAdminPassword(cleanPassword);
-    }
-  } catch (authError) {
-    // If direct auth failed:
-    // Case 1: Entered password is the Master Password!
-    // Authenticate into Firebase Auth using the known admin account credentials in the background
-    if (masterCheck.isMaster && isDesignatedAdmin) {
-      try {
-        let fallbackCred = null;
-        const candidatePasswords = [
-          activePassword,
-          DEFAULT_ADMIN_PASSWORD,
-          "#Icct4228",
-          "#ICCT4228"
-        ].filter(Boolean);
 
-        for (const pwd of candidatePasswords) {
-          try {
-            fallbackCred = await signInWithEmailAndPassword(
-              auth,
-              cleanEmail,
-              pwd
-            );
-            if (fallbackCred?.user) break;
-          } catch {
-            // Try next candidate
-          }
-        }
+  const candidateEmails = [
+    cleanEmail,
+    "erequestadmin@gmail.com",
+    DEFAULT_ADMIN_EMAIL.toLowerCase()
+  ].filter((val, idx, arr) => val && arr.indexOf(val) === idx);
 
-        if (fallbackCred?.user) {
-          userCredential = fallbackCred;
-        } else if (isLocalhost) {
-          userCredential = {
-            user: {
-              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
-              email: cleanEmail,
-              displayName: "Administrator"
-            }
-          };
-        } else {
-          throw authError;
-        }
-      } catch {
-        if (isLocalhost) {
-          userCredential = {
-            user: {
-              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
-              email: cleanEmail,
-              displayName: "Administrator"
-            }
-          };
-        } else {
-          throw authError;
-        }
-      }
-    } else if (isDesignatedAdmin && cleanPassword === activePassword) {
-      try {
-        let fallbackCred = null;
-        const candidatePasswords = [
-          DEFAULT_ADMIN_PASSWORD,
-          "#Icct4228",
-          "#ICCT4228"
-        ].filter(Boolean);
+  // 1. Establish a REAL Firebase Authentication session.
+  // Firestore security rules require an authenticated admin, so a fake/local session would
+  // show an empty portal (no data). Therefore we never fabricate a session.
+  let userCredential;
+  if (isMasterEntered && isDesignatedAdmin) {
+    // Master Password is NOT the Firebase Auth password. Skip the guaranteed-to-fail direct
+    // attempt (it only burns the Firebase rate limit) and sign in using the account password.
+    const hasExistingAdminSession = Boolean(
+      auth?.currentUser &&
+        AUTHORIZED_ADMIN_EMAILS.some(
+          (adm) => adm.toLowerCase() === String(auth.currentUser.email || "").toLowerCase()
+        )
+    );
 
-        for (const pwd of candidatePasswords) {
-          try {
-            fallbackCred = await signInWithEmailAndPassword(
-              auth,
-              cleanEmail,
-              pwd
-            );
-            if (fallbackCred?.user) break;
-          } catch {
-            // Try next candidate
-          }
-        }
-
-        if (fallbackCred?.user) {
-          userCredential = fallbackCred;
-          setActiveAdminPassword(cleanPassword);
-
-          // Auto-synchronize Firebase Auth password in cloud to cleanPassword so subsequent logins match directly
-          try {
-            await updatePassword(fallbackCred.user, cleanPassword);
-          } catch (syncErr) {
-            console.warn("Auto-syncing password to cloud notice:", syncErr.message);
-          }
-        } else if (isLocalhost) {
-          // On localhost: If designated admin entered the EXACT verified password,
-          // but Firebase Auth fails (e.g. auth/unauthorized-domain, rate limits, or network restrictions),
-          // allow local admin development authentication
-          console.warn("[Localhost Auth] Local development authentication engaged for designated admin.");
-          userCredential = {
-            user: {
-              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
-              email: cleanEmail,
-              displayName: "Administrator"
-            }
-          };
-          setActiveAdminPassword(cleanPassword);
-        } else {
-          throw authError;
-        }
-      } catch (innerErr) {
-        if (isLocalhost) {
-          console.warn("[Localhost Auth] Local development authentication engaged for designated admin:", innerErr.message);
-          userCredential = {
-            user: {
-              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
-              email: cleanEmail,
-              displayName: "Administrator"
-            }
-          };
-          setActiveAdminPassword(cleanPassword);
-        } else {
-          throw authError;
-        }
-      }
+    if (hasExistingAdminSession) {
+      userCredential = { user: auth.currentUser };
     } else {
-      throw authError;
+      const cloudPasswords = getCloudSyncPasswordCandidates();
+      if (cloudPasswords.length === 0) {
+        throw new Error(
+          "Log in once with your admin password on this browser first, then you can use the Master Password."
+        );
+      }
+
+      const result = await signInWithCandidates(candidateEmails, cloudPasswords);
+      if (!result.credential) {
+        throw result.error;
+      }
+      userCredential = result.credential;
+    }
+  } else {
+    try {
+      userCredential = await signInWithEmailAndPassword(
+        auth,
+        cleanEmail,
+        cleanPassword
+      );
+      setActiveAdminPassword(cleanPassword);
+    } catch (authError) {
+      if (
+        isDesignatedAdmin &&
+        authError?.code !== "auth/too-many-requests" &&
+        (isRecognizedPassword || cleanPassword === activePassword)
+      ) {
+        const candidatePasswords = getCloudSyncPasswordCandidates([cleanPassword]);
+
+        const result = await signInWithCandidates(
+          candidateEmails,
+          candidatePasswords,
+          { email: cleanEmail, password: cleanPassword }
+        );
+        if (!result.credential) {
+          throw result.error || authError;
+        }
+        userCredential = result.credential;
+        setActiveAdminPassword(cleanPassword);
+
+        // Auto-synchronize Firebase Auth password in cloud to cleanPassword so subsequent logins match directly
+        try {
+          await updatePassword(userCredential.user, cleanPassword);
+        } catch (syncErr) {
+          console.warn("Auto-syncing password to cloud notice:", syncErr.message);
+        }
+      } else {
+        throw authError;
+      }
     }
   }
 
-  // 2. Synchronize Vault State:
-  // If Master Password was entered -> unlock the vault in session!
-  // If Normal Password was entered -> keep vault locked in session!
-  if (masterCheck.isMaster) {
+  // 2. Synchronize Master Encryption Key State:
+  // If Master Password was entered in the login password input -> activate master crypto key!
+  // If Normal Password was entered -> vault stays locked (admin types the Master Password themselves)
+  if (isMasterEntered) {
     if (masterCheck.cryptoKey) {
       await saveVaultKeyToSession(masterCheck.cryptoKey);
-    } else if (masterCheck.isDefault) {
+      setActiveMasterCryptoKey(masterCheck.cryptoKey);
+    } else {
       try {
-        const initRes = await initializeVault(cleanPassword);
-        if (initRes?.cryptoKey) {
-          await saveVaultKeyToSession(initRes.cryptoKey);
+        const cfg = await getVaultConfig();
+        if (cfg && cfg.saltHex) {
+          const key = await deriveKeyFromPassword(cleanPassword, cfg.saltHex);
+          await saveVaultKeyToSession(key);
+          setActiveMasterCryptoKey(key);
         }
       } catch (initErr) {
-        console.warn("[Login] Default master vault init notice:", initErr?.message || initErr);
+        console.warn("[Login] Master vault key derive notice:", initErr?.message || initErr);
       }
     }
   } else {
+    // Normal admin password was entered: keep the vault LOCKED. The admin must type the
+    // Master Password in the login password box to unlock master-only data.
+    // (Device names / OS stay readable via the catalog key regardless.)
     clearVaultKeyFromSession();
+    setActiveMasterCryptoKey(null);
   }
 
   const user = userCredential.user;
@@ -983,7 +1041,16 @@ export async function loginAdmin(email, password) {
           "This account does not have administrator privileges."
         );
       }
-      return { user, adminData };
+      return {
+        user: {
+          ...user,
+          email: cleanEmail
+        },
+        adminData: {
+          ...adminData,
+          email: cleanEmail
+        }
+      };
     }
   } catch (err) {
     console.warn("Firestore admin role check notice:", err.message);
@@ -992,10 +1059,13 @@ export async function loginAdmin(email, password) {
   // 3. Fallback for designated admin account
   if (isDesignatedAdmin) {
     return {
-      user,
+      user: {
+        ...user,
+        email: cleanEmail
+      },
       adminData: {
         role: "admin",
-        email: user.email
+        email: cleanEmail
       }
     };
   }
@@ -1010,7 +1080,10 @@ export async function logoutAdmin() {
   try {
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem("erequest_admin_auth_session");
+      sessionStorage.removeItem("erequest_vault_salt_hex");
     }
+    clearVaultKeyFromSession();
+    setActiveMasterCryptoKey(null);
   } catch {
     // Ignore
   }

@@ -16,12 +16,54 @@ import {
   verifyCanary,
   saveVaultKeyToSession,
   loadVaultKeyFromSession,
-  clearVaultKeyFromSession
+  clearVaultKeyFromSession,
+  setActiveMasterCryptoKey
 } from "../../utils/vaultCrypto.js";
 
 export const VAULT_CONFIG_COLLECTION = "vault_config";
 export const VAULT_PRIMARY_DOC_ID = "primary";
 export const DEFAULT_MASTER_PASSWORD = "#IcctMaster4228";
+const VAULT_CONFIG_CACHE_KEY = "erequest_vault_config_cache";
+
+function writeVaultConfigCache(cfg) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (cfg && cfg.isConfigured) {
+        localStorage.setItem(
+          VAULT_CONFIG_CACHE_KEY,
+          JSON.stringify({
+            id: cfg.id || VAULT_PRIMARY_DOC_ID,
+            isConfigured: Boolean(cfg.isConfigured),
+            saltHex: cfg.saltHex || "",
+            canaryCiphertext: cfg.canaryCiphertext || "",
+            recoveryCanary: cfg.recoveryCanary || ""
+          })
+        );
+      } else {
+        localStorage.removeItem(VAULT_CONFIG_CACHE_KEY);
+      }
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function readVaultConfigCache() {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(VAULT_CONFIG_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.isConfigured && parsed.saltHex && parsed.canaryCiphertext) {
+          return parsed;
+        }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
 
 /* =========================================================
    VAULT CONFIG LOADER
@@ -36,10 +78,11 @@ export async function getVaultConfig() {
     const docRef = doc(db, VAULT_CONFIG_COLLECTION, VAULT_PRIMARY_DOC_ID);
     const snap = await getDoc(docRef);
     if (!snap.exists()) {
+      writeVaultConfigCache(null);
       return null;
     }
     const data = snap.data();
-    return {
+    const cfg = {
       id: snap.id,
       isConfigured: Boolean(data.isConfigured),
       saltHex: data.saltHex,
@@ -48,9 +91,11 @@ export async function getVaultConfig() {
       createdAt: data.createdAt,
       updatedAt: data.updatedAt
     };
+    writeVaultConfigCache(cfg);
+    return cfg;
   } catch (err) {
     console.warn("[VaultService] Notice reading vault configuration:", err?.message || err);
-    return null;
+    return readVaultConfigCache();
   }
 }
 
@@ -79,19 +124,33 @@ export async function initializeVault(password2) {
   const recoveryCryptoKey = await deriveKeyFromRecoveryKey(recoveryKey, saltHex);
   const recoveryCanary = await generateCanary(recoveryCryptoKey);
 
-  // 3. Save to Firestore
+  // 3. Save to Firestore (preserve createdAt if document already exists)
   const docRef = doc(db, VAULT_CONFIG_COLLECTION, VAULT_PRIMARY_DOC_ID);
-  await setDoc(docRef, {
+  let existingCreatedAt = null;
+  try {
+    const existingSnap = await getDoc(docRef);
+    if (existingSnap.exists() && existingSnap.data()?.createdAt) {
+      existingCreatedAt = existingSnap.data().createdAt;
+    }
+  } catch {
+    // Document may not exist yet
+  }
+
+  const payload = {
     isConfigured: true,
     saltHex: saltHex,
     canaryCiphertext: canaryCiphertext,
     recoveryCanary: recoveryCanary,
-    createdAt: serverTimestamp(),
+    createdAt: existingCreatedAt || serverTimestamp(),
     updatedAt: serverTimestamp()
-  });
+  };
 
-  // 4. Cache key in session
+  await setDoc(docRef, payload);
+  writeVaultConfigCache({ id: VAULT_PRIMARY_DOC_ID, ...payload });
+
+  // 4. Cache key in session and set active in-memory master key
   await saveVaultKeyToSession(primaryCryptoKey);
+  setActiveMasterCryptoKey(primaryCryptoKey);
 
   return {
     recoveryKey,
@@ -123,6 +182,7 @@ export async function unlockVaultWithPassword(password2, vaultConfig) {
   }
 
   await saveVaultKeyToSession(candidateKey);
+  setActiveMasterCryptoKey(candidateKey);
   return candidateKey;
 }
 
@@ -167,7 +227,15 @@ export async function resetVaultWithRecoveryKey(recoveryKey, newPassword2, vault
     updatedAt: serverTimestamp()
   });
 
+  writeVaultConfigCache({
+    ...vaultConfig,
+    isConfigured: true,
+    canaryCiphertext: newCanary,
+    recoveryCanary: newRecoveryCanary
+  });
+
   await saveVaultKeyToSession(newPrimaryCryptoKey);
+  setActiveMasterCryptoKey(newPrimaryCryptoKey);
 
   return {
     newRecoveryKey,
@@ -181,6 +249,7 @@ export async function resetVaultWithRecoveryKey(recoveryKey, newPassword2, vault
 
 export function lockVaultSession() {
   clearVaultKeyFromSession();
+  setActiveMasterCryptoKey(null);
 }
 
 /* =========================================================
@@ -220,6 +289,10 @@ export async function checkIfMasterPassword(candidatePassword) {
     return { isMaster: false };
   }
 
+  const isDefaultCandidate =
+    clean === DEFAULT_MASTER_PASSWORD ||
+    clean.toLowerCase() === DEFAULT_MASTER_PASSWORD.toLowerCase();
+
   // 1. Check against Firestore vault_config/primary canary
   try {
     const cfg = await getVaultConfig();
@@ -229,22 +302,19 @@ export async function checkIfMasterPassword(candidatePassword) {
       if (isValid) {
         return { isMaster: true, cryptoKey: candidateKey, cfg };
       }
-    } else {
-      // Not yet configured -> check if matches DEFAULT_MASTER_PASSWORD
-      if (clean === DEFAULT_MASTER_PASSWORD) {
-        return { isMaster: true, isDefault: true };
-      }
+      // When a custom Master Password is configured in vault_config/primary,
+      // reject any password that does not match its canary.
+      return { isMaster: false };
+    }
+    // Not yet configured -> only match DEFAULT_MASTER_PASSWORD
+    if (isDefaultCandidate) {
+      return { isMaster: true, isDefault: true };
     }
   } catch (err) {
     console.warn("[VaultService] Master password verification notice:", err?.message || err);
-    if (clean === DEFAULT_MASTER_PASSWORD) {
+    if (isDefaultCandidate) {
       return { isMaster: true, isDefault: true };
     }
-  }
-
-  // Fallback match for unconfigured or newly initialized states
-  if (clean === DEFAULT_MASTER_PASSWORD) {
-    return { isMaster: true, isDefault: true };
   }
 
   return { isMaster: false };

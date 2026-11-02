@@ -293,12 +293,19 @@ export function normalizeProfileData(raw = {}, uid, fallback = null) {
           : "")
       : rawPhone);
 
+  const rawName = String(raw.name || "");
+  const resolvedName =
+    (rawName.startsWith(CIPHER_PREFIX)
+      ? catalogDecryptedCache.get(rawName)
+      : rawName) ||
+    auth.currentUser?.displayName ||
+    (fallback?.name && !String(fallback.name).startsWith(CIPHER_PREFIX)
+      ? fallback.name
+      : "") ||
+    DEFAULT_PROFILE.name;
+
   return {
-    name:
-      raw.name ||
-      auth.currentUser?.displayName ||
-      fallback?.name ||
-      DEFAULT_PROFILE.name,
+    name: resolvedName,
     position: resolvedPosition,
     department: resolvedDepartment,
     email: currentEmail,
@@ -349,9 +356,20 @@ export async function normalizeProfileDataAsync(raw = {}, uid, fallback = null) 
     decryptedPhone = "";
   }
 
+  let decryptedName = null;
+  try {
+    const n = await decryptCatalogField(raw.name || "");
+    if (n && !String(n).startsWith(CIPHER_PREFIX)) {
+      decryptedName = n;
+    }
+  } catch (err) {
+    console.warn("[ProfileService] Name decryption notice:", err);
+  }
+
   const base = normalizeProfileData(raw, uid, fallback);
   return {
     ...base,
+    name: decryptedName || base.name,
     position: decryptedPosition,
     department: decryptedDepartment,
     phone: decryptedPhone
@@ -448,14 +466,16 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
   const encryptedPosition = await encryptCatalogField(cleanPosition);
   const encryptedDepartment = await encryptCatalogField(cleanDepartment);
   const encryptedPhone = cleanPhone ? await encryptCatalogField(cleanPhone) : "";
+  const encryptedName = await encryptCatalogField(cleanName);
 
   // Prime local decrypted cache immediately
   if (encryptedPosition) catalogDecryptedCache.set(encryptedPosition, cleanPosition);
   if (encryptedDepartment) catalogDecryptedCache.set(encryptedDepartment, cleanDepartment);
   if (encryptedPhone) catalogDecryptedCache.set(encryptedPhone, cleanPhone);
+  if (encryptedName) catalogDecryptedCache.set(encryptedName, cleanName);
 
   const payload = {
-    name: cleanName,
+    name: encryptedName,
     position: encryptedPosition,
     department: encryptedDepartment,
     phone: encryptedPhone,
@@ -477,7 +497,7 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
       setDoc(
         compRef,
         {
-          name: cleanName,
+          name: encryptedName,
           position: encryptedPosition,
           department: encryptedDepartment,
           phone: encryptedPhone,

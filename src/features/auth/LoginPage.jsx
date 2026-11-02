@@ -7,6 +7,7 @@ import {
   sendPasswordResetOTP,
   verifyPasswordResetOTP,
   setNewAdminPassword,
+  sendDirectFirebaseResetEmail,
   logoutAdmin,
   validatePasswordCriteria,
   isSameAsOlderPassword,
@@ -54,6 +55,26 @@ function LoginPage({ initialMode = "login" }) {
 
   // Cooldown timer for resending OTP
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Login lockout (Firebase "too many attempts"): stops repeated tries that extend the block
+  const LOGIN_LOCK_KEY = "erequest_login_lock_until";
+  const LOGIN_LOCK_MS = 15 * 60 * 1000;
+  const readLockUntil = () => {
+    try {
+      return Number(localStorage.getItem(LOGIN_LOCK_KEY)) || 0;
+    } catch {
+      return 0;
+    }
+  };
+  const [lockUntil, setLockUntil] = useState(readLockUntil);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const lockSecondsLeft = Math.max(0, Math.ceil((lockUntil - nowTick) / 1000));
+
+  useEffect(() => {
+    if (!lockUntil) return undefined;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lockUntil]);
 
   // Status feedback
   const [loading, setLoading] = useState(false);
@@ -121,6 +142,10 @@ function LoginPage({ initialMode = "login" }) {
   const handleLogin = async (event) => {
     event.preventDefault();
 
+    if (lockUntil > Date.now()) {
+      return;
+    }
+
     setErrorMessage("");
     setSuccessMessage("");
     setInfoMessage("");
@@ -159,9 +184,20 @@ function LoginPage({ initialMode = "login" }) {
           setErrorMessage("This account has been disabled.");
           break;
 
-        case "auth/too-many-requests":
-          setErrorMessage("Too many login attempts. Please try again later.");
+        case "auth/too-many-requests": {
+          const until = Date.now() + LOGIN_LOCK_MS;
+          try {
+            localStorage.setItem(LOGIN_LOCK_KEY, String(until));
+          } catch {
+            // Ignore storage errors
+          }
+          setLockUntil(until);
+          setNowTick(Date.now());
+          setErrorMessage(
+            "Too many login attempts. Do not keep retrying - it extends the block. Wait, or use Forgot Password."
+          );
           break;
+        }
 
         case "auth/network-request-failed":
           setErrorMessage(
@@ -213,6 +249,34 @@ function LoginPage({ initialMode = "login" }) {
       console.error("Failed to send OTP:", error);
       setErrorMessage(
         error.message || "Failed to send verification OTP. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* Direct Firebase cloud reset fallback */
+  const handleDirectFirebaseReset = async () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+    setInfoMessage("");
+
+    const targetEmail = resetEmail.trim();
+    if (!targetEmail) {
+      setErrorMessage("Please enter your administrator email address.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await sendDirectFirebaseResetEmail(targetEmail);
+      setSuccessMessage(
+        `Official Firebase password reset link sent to ${targetEmail}. Please check your Gmail inbox or spam folder to reset your password directly on Google.`
+      );
+    } catch (err) {
+      console.error("Firebase direct reset email error:", err);
+      setErrorMessage(
+        err.message || "Failed to send Firebase reset email. Please try again."
       );
     } finally {
       setLoading(false);
@@ -461,9 +525,13 @@ function LoginPage({ initialMode = "login" }) {
             <button
               type="submit"
               className="login-button"
-              disabled={loading}
+              disabled={loading || lockSecondsLeft > 0}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading
+                ? "Signing in..."
+                : lockSecondsLeft > 0
+                  ? `Try again in ${Math.floor(lockSecondsLeft / 60)}:${String(lockSecondsLeft % 60).padStart(2, "0")}`
+                  : "Sign In"}
             </button>
           </form>
         )}
@@ -507,6 +575,26 @@ function LoginPage({ initialMode = "login" }) {
             >
               Back to Sign In
             </button>
+
+            <div style={{ textAlign: "center", marginTop: "10px" }}>
+              <button
+                type="button"
+                className="firebase-direct-reset-link"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#2563eb",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  padding: "4px"
+                }}
+                onClick={handleDirectFirebaseReset}
+                disabled={loading}
+              >
+                Send official Firebase reset link to Gmail instead
+              </button>
+            </div>
           </form>
         )}
 
@@ -577,6 +665,26 @@ function LoginPage({ initialMode = "login" }) {
             >
               Cancel and Return to Sign In
             </button>
+
+            <div style={{ textAlign: "center", marginTop: "10px" }}>
+              <button
+                type="button"
+                className="firebase-direct-reset-link"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#2563eb",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  padding: "4px"
+                }}
+                onClick={handleDirectFirebaseReset}
+                disabled={loading}
+              >
+                Didn&apos;t receive OTP? Send official Firebase reset email
+              </button>
+            </div>
           </form>
         )}
 

@@ -9,9 +9,26 @@ import {
 import { db } from "../../firebase/firebaseConfig.js";
 import {
   encryptVaultField,
+  decryptVaultField,
   getCatalogCryptoKey,
   CIPHER_PREFIX
 } from "../../utils/vaultCrypto.js";
+
+async function ensureEncryptedWithMasterKey(rawValue, masterCryptoKey, catalogKey) {
+  if (!rawValue || typeof rawValue !== "string") return null;
+  if (!rawValue.startsWith(CIPHER_PREFIX)) {
+    return await encryptVaultField(rawValue, masterCryptoKey);
+  }
+  const decryptedByMaster = await decryptVaultField(rawValue, masterCryptoKey);
+  if (decryptedByMaster !== rawValue && !decryptedByMaster.startsWith(CIPHER_PREFIX)) {
+    return null;
+  }
+  const decryptedByCatalog = await decryptVaultField(rawValue, catalogKey);
+  if (decryptedByCatalog !== rawValue && !decryptedByCatalog.startsWith(CIPHER_PREFIX)) {
+    return await encryptVaultField(decryptedByCatalog, masterCryptoKey);
+  }
+  return null;
+}
 
 /**
  * Encrypts all existing plaintext records in the database:
@@ -147,8 +164,14 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       if (data.websiteName && !String(data.websiteName).startsWith(CIPHER_PREFIX)) {
         updates.websiteName = await encryptVaultField(data.websiteName, catalogKey);
       }
+      if (data.websiteUrl && !String(data.websiteUrl).startsWith(CIPHER_PREFIX)) {
+        updates.websiteUrl = await encryptVaultField(data.websiteUrl, catalogKey);
+      }
       if (data.imageCaption && !String(data.imageCaption).startsWith(CIPHER_PREFIX)) {
         updates.imageCaption = await encryptVaultField(data.imageCaption, catalogKey);
+      }
+      if (data.remoteImageUrl && !String(data.remoteImageUrl).startsWith(CIPHER_PREFIX)) {
+        updates.remoteImageUrl = await encryptVaultField(data.remoteImageUrl, catalogKey);
       }
 
       if (Object.keys(updates).length > 0) {
@@ -222,11 +245,13 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const data = docSnap.data();
       const updates = {};
 
-      if (data.deviceName && !String(data.deviceName).startsWith(CIPHER_PREFIX)) {
-        updates.deviceName = await encryptVaultField(data.deviceName, cryptoKey);
+      const nextDeviceName = await ensureEncryptedWithMasterKey(data.deviceName, cryptoKey, catalogKey);
+      if (nextDeviceName) {
+        updates.deviceName = nextDeviceName;
       }
-      if (data.osVersion && !String(data.osVersion).startsWith(CIPHER_PREFIX)) {
-        updates.osVersion = await encryptVaultField(data.osVersion, cryptoKey);
+      const nextOsVersion = await ensureEncryptedWithMasterKey(data.osVersion, cryptoKey, catalogKey);
+      if (nextOsVersion) {
+        updates.osVersion = nextOsVersion;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -249,11 +274,16 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const data = docSnap.data();
       const updates = {};
 
-      if (data.deviceName && !String(data.deviceName).startsWith(CIPHER_PREFIX)) {
-        updates.deviceName = await encryptVaultField(data.deviceName, cryptoKey);
+      if (data.email && !String(data.email).startsWith(CIPHER_PREFIX)) {
+        updates.email = await encryptVaultField(data.email, catalogKey);
       }
-      if (data.osVersion && !String(data.osVersion).startsWith(CIPHER_PREFIX)) {
-        updates.osVersion = await encryptVaultField(data.osVersion, cryptoKey);
+      const nextDeviceName = await ensureEncryptedWithMasterKey(data.deviceName, cryptoKey, catalogKey);
+      if (nextDeviceName) {
+        updates.deviceName = nextDeviceName;
+      }
+      const nextOsVersion = await ensureEncryptedWithMasterKey(data.osVersion, cryptoKey, catalogKey);
+      if (nextOsVersion) {
+        updates.osVersion = nextOsVersion;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -276,6 +306,9 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const data = docSnap.data();
       const updates = {};
 
+      if (data.name && !String(data.name).startsWith(CIPHER_PREFIX)) {
+        updates.name = await encryptVaultField(data.name, catalogKey);
+      }
       if (data.department && !String(data.department).startsWith(CIPHER_PREFIX)) {
         updates.department = await encryptVaultField(data.department, catalogKey);
       }
@@ -306,11 +339,23 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const data = docSnap.data();
       const updates = {};
 
+      if (data.title && !String(data.title).startsWith(CIPHER_PREFIX)) {
+        updates.title = await encryptVaultField(data.title, catalogKey);
+      }
       if (data.details && !String(data.details).startsWith(CIPHER_PREFIX)) {
-        updates.details = await encryptVaultField(data.details, cryptoKey);
+        updates.details = await encryptVaultField(data.details, catalogKey);
       }
       if (data.description && !String(data.description).startsWith(CIPHER_PREFIX)) {
-        updates.description = await encryptVaultField(data.description, cryptoKey);
+        updates.description = await encryptVaultField(data.description, catalogKey);
+      }
+      if (data.parentName && !String(data.parentName).startsWith(CIPHER_PREFIX)) {
+        updates.parentName = await encryptVaultField(data.parentName, catalogKey);
+      }
+      if (data.adminName && !String(data.adminName).startsWith(CIPHER_PREFIX)) {
+        updates.adminName = await encryptVaultField(data.adminName, catalogKey);
+      }
+      if (data.adminEmail && !String(data.adminEmail).startsWith(CIPHER_PREFIX)) {
+        updates.adminEmail = await encryptVaultField(data.adminEmail, catalogKey);
       }
 
       if (Object.keys(updates).length > 0) {
