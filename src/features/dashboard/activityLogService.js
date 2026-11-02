@@ -22,6 +22,11 @@ import {
   convertTimestampToDate
 } from "../../utils/timestampUtils.js";
 
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../utils/vaultCrypto.js";
+
 const ACTIVITY_LOGS_COLLECTION = "activity_logs";
 
 /* =========================================================
@@ -62,12 +67,25 @@ export async function addActivityLog({
     DEFAULT_ADMIN_EMAIL
   ).trim();
 
+  let encryptedDescription = cleanDescription;
+  let encryptedDetails = cleanDetails;
+  try {
+    if (cleanDescription) {
+      encryptedDescription = await encryptCatalogField(cleanDescription);
+    }
+    if (cleanDetails) {
+      encryptedDetails = await encryptCatalogField(cleanDetails);
+    }
+  } catch {
+    // Fall back to clean strings if encryption is unavailable
+  }
+
   const payload = {
     type: cleanType,
     action: cleanAction,
     title: cleanTitle,
-    description: cleanDescription,
-    details: cleanDetails,
+    description: encryptedDescription,
+    details: encryptedDetails,
     parentName: String(parentName || "").trim(),
     parentId: String(parentId || "").trim(),
     recordId: String(recordId || "").trim(),
@@ -110,15 +128,23 @@ export async function getRecentActivityLogs(maxLogs = 5) {
 
     const snapshot = await getDocs(recentActivitiesQuery);
 
-    return snapshot.docs.map((document) => {
-      const data = document.data();
-      return {
-        id: document.id,
-        ...data,
-        createdAt: data.createdAt || data.timestamp || null,
-        timestamp: data.timestamp || data.createdAt || null
-      };
-    });
+    return await Promise.all(
+      snapshot.docs.map(async (document) => {
+        const data = document.data();
+        const [decDesc, decDetails] = await Promise.all([
+          decryptCatalogField(data.description),
+          decryptCatalogField(data.details)
+        ]);
+        return {
+          id: document.id,
+          ...data,
+          description: decDesc || data.description,
+          details: decDetails || data.details,
+          createdAt: data.createdAt || data.timestamp || null,
+          timestamp: data.timestamp || data.createdAt || null
+        };
+      })
+    );
   } catch (err) {
     console.warn("Failed to fetch activity logs:", err?.message || err);
     return [];
@@ -152,17 +178,25 @@ export function subscribeToRecentActivityLogs(
 
     const unsubscribe = onSnapshot(
       recentActivitiesQuery,
-      (snapshot) => {
+      async (snapshot) => {
         try {
-          const logs = snapshot.docs.map((document) => {
-            const data = document.data();
-            return {
-              id: document.id,
-              ...data,
-              createdAt: data.createdAt || data.timestamp || null,
-              timestamp: data.timestamp || data.createdAt || null
-            };
-          });
+          const logs = await Promise.all(
+            snapshot.docs.map(async (document) => {
+              const data = document.data();
+              const [decDesc, decDetails] = await Promise.all([
+                decryptCatalogField(data.description),
+                decryptCatalogField(data.details)
+              ]);
+              return {
+                id: document.id,
+                ...data,
+                description: decDesc || data.description,
+                details: decDetails || data.details,
+                createdAt: data.createdAt || data.timestamp || null,
+                timestamp: data.timestamp || data.createdAt || null
+              };
+            })
+          );
           onUpdate(logs);
         } catch (processErr) {
           console.warn("Failed to process real-time activity logs:", processErr);
