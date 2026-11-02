@@ -124,12 +124,26 @@ test("checkIfMasterPassword detects default master password and rejects normal p
   const { terminate } = await import("firebase/firestore");
   const { db } = await import("../src/firebase/firebaseConfig.js");
 
-  // Default master password check
-  const masterCheck = await checkIfMasterPassword(DEFAULT_MASTER_PASSWORD);
+  const customSalt = generateRandomSalt();
+  const customMasterPwd = "CustomMasterKey#2026";
+  const customKey = await deriveKeyFromPassword(customMasterPwd, customSalt);
+  const customCanary = await generateCanary(customKey);
+  const mockCfg = {
+    isConfigured: true,
+    saltHex: customSalt,
+    canaryCiphertext: customCanary
+  };
+
+  // Custom configured master password check
+  const customCheck = await checkIfMasterPassword(customMasterPwd, mockCfg);
+  assert.equal(customCheck.isMaster, true);
+
+  // Default master password check when unconfigured
+  const masterCheck = await checkIfMasterPassword(DEFAULT_MASTER_PASSWORD, null);
   assert.equal(masterCheck.isMaster, true);
 
   // Normal password should not match master password
-  const normalCheck = await checkIfMasterPassword("#Icct4228");
+  const normalCheck = await checkIfMasterPassword("#Icct4228", mockCfg);
   assert.equal(normalCheck.isMaster, false);
 
   // Invalid / empty password

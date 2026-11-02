@@ -49,6 +49,19 @@ function blankViewSourcePlugin() {
         next()
       })
     },
+    enforce: 'post',
+    generateBundle(_, bundle) {
+      const indexAsset = bundle['index.html']
+      if (indexAsset && indexAsset.type === 'asset' && typeof indexAsset.source === 'string') {
+        const singleLineHtml = indexAsset.source
+          .replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/\r?\n\s*/g, '')
+          .trim()
+        const verticalBlankLines = Array.from({ length: 300 }, () => ' '.repeat(300)).join('\n')
+        const horizontalBlankPadding = ' '.repeat(60000)
+        indexAsset.source = `${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}${singleLineHtml}`
+      }
+    },
   }
 }
 

@@ -280,7 +280,7 @@ export async function restoreVaultSession(vaultConfig) {
  * @param {string} candidatePassword
  * @returns {Promise<{ isMaster: boolean, cryptoKey?: CryptoKey, cfg?: object, isDefault?: boolean }>}
  */
-export async function checkIfMasterPassword(candidatePassword) {
+export async function checkIfMasterPassword(candidatePassword, customVaultConfig = undefined) {
   if (!candidatePassword || typeof candidatePassword !== "string") {
     return { isMaster: false };
   }
@@ -295,7 +295,7 @@ export async function checkIfMasterPassword(candidatePassword) {
 
   // 1. Check against Firestore vault_config/primary canary
   try {
-    const cfg = await getVaultConfig();
+    const cfg = customVaultConfig !== undefined ? customVaultConfig : await getVaultConfig();
     if (cfg && cfg.isConfigured && cfg.saltHex && cfg.canaryCiphertext) {
       const candidateKey = await deriveKeyFromPassword(clean, cfg.saltHex);
       const isValid = await verifyCanary(cfg.canaryCiphertext, candidateKey);

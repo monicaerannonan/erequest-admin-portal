@@ -1,10 +1,12 @@
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
+  doc,
   getDocs,
   onSnapshot,
   query,
-  limit
+  limit,
+  updateDoc
 } from "firebase/firestore";
 
 import { auth, db } from "../../firebase/firebaseConfig.js";
@@ -12,6 +14,12 @@ import {
   convertTimestampToDate,
   convertTimestampToMillis
 } from "../../utils/timestampUtils.js";
+import {
+  CIPHER_PREFIX,
+  encryptVaultField,
+  getActiveMasterCryptoKey,
+  getCatalogCryptoKey
+} from "../../utils/vaultCrypto.js";
 
 export const STUDENT_ACTIVITY_LOGS_COLLECTION = "student_activity_logs";
 export const STUDENTS_COLLECTION = "students";
@@ -150,15 +158,32 @@ export function normalizeStudentActivityLog(id, data = {}) {
     ? Math.max(0, Math.floor(parsedOpenCount))
     : 0;
 
-  const rawTimestamp =
+  const candidateTimestamps = [
+    data.lastActiveAt,
+    data.updatedAt,
+    data.timestamp,
+    data.lastLoginAt,
+    data.createdAt
+  ].filter(Boolean);
+
+  let rawTimestamp =
     data.lastActiveAt ??
     data.updatedAt ??
     data.timestamp ??
+    data.lastLoginAt ??
     data.createdAt ??
     null;
+  let activityMillis = convertTimestampToMillis(rawTimestamp) ?? 0;
+
+  for (const candidate of candidateTimestamps) {
+    const ms = convertTimestampToMillis(candidate) ?? 0;
+    if (ms > activityMillis) {
+      activityMillis = ms;
+      rawTimestamp = candidate;
+    }
+  }
 
   const activityDate = convertTimestampToDate(rawTimestamp);
-  const activityMillis = convertTimestampToMillis(rawTimestamp) ?? 0;
 
   const todayKey = getManilaDateKey(new Date());
   const rawSwitchDate = String(data.switchDate || "").trim();
@@ -231,6 +256,171 @@ function sortLogsNewestFirst(logs) {
   return [...logs].sort((a, b) => b.activityMillis - a.activityMillis);
 }
 
+function getStudentRecordTimestampMillis(student = {}) {
+  const candidates = [
+    student.lastLoginAt,
+    student.updatedAt,
+    student.registeredAt,
+    student.createdAt
+  ].filter(Boolean);
+  let bestMs = 0;
+  let bestRaw = null;
+  for (const c of candidates) {
+    const ms = convertTimestampToMillis(c) ?? 0;
+    if (ms > bestMs) {
+      bestMs = ms;
+      bestRaw = c;
+    }
+  }
+  return { millis: bestMs, rawTimestamp: bestRaw };
+}
+
+/**
+ * Merges `student_activity_logs` documents with `students` documents so that
+ * whenever a student registers or logs in on the Android app (even if `students`
+ * updates slightly after or before `student_activity_logs`), the Admin Portal
+ * immediately reflects the latest active student and timestamp on each device.
+ */
+function mergeActivityLogsWithStudents(rawLogDocs = [], rawStudentDocs = [], maxLimit = 0) {
+  const logMap = new Map();
+  for (const logDoc of rawLogDocs) {
+    if (!logDoc) continue;
+    const key = String(logDoc.installationId || logDoc.id || "").trim();
+    if (!key) continue;
+    logMap.set(key, { ...logDoc, id: logDoc.id || key, installationId: key });
+  }
+
+  const studentsByDevice = new Map();
+  for (const student of rawStudentDocs) {
+    if (!student || student.status === "blocked") continue;
+    const deviceId = String(student.deviceId || "").trim();
+    const studentNumber = String(student.studentNumber || student.id || "").trim();
+    if (!deviceId || !studentNumber) continue;
+    if (!studentsByDevice.has(deviceId)) {
+      studentsByDevice.set(deviceId, []);
+    }
+    studentsByDevice.get(deviceId).push({
+      ...student,
+      studentNumber,
+      ...getStudentRecordTimestampMillis(student)
+    });
+  }
+
+  for (const [deviceId, deviceStudents] of studentsByDevice.entries()) {
+    deviceStudents.sort((a, b) => b.millis - a.millis);
+    const mostRecentStudent = deviceStudents[0];
+    const existingLog = logMap.get(deviceId);
+
+    if (existingLog) {
+      const existingNormalized = normalizeStudentActivityLog(existingLog.id, existingLog);
+      if (mostRecentStudent && mostRecentStudent.millis > existingNormalized.activityMillis) {
+        existingLog.lastActiveAt = mostRecentStudent.rawTimestamp;
+        const alreadyLoggedOnPhone = existingNormalized.loggedStudentNumbers.some(
+          (id) => id.toLowerCase() === mostRecentStudent.studentNumber.toLowerCase()
+        );
+        if (
+          alreadyLoggedOnPhone ||
+          existingNormalized.loggedStudentNumbers.length < MAX_ACCOUNT_SWITCHES_PER_DEVICE
+        ) {
+          existingLog.currentStudentNumber = mostRecentStudent.studentNumber;
+          existingLog.loggedStudentNumbers = dedupeStudentIdsPreserveOrder([
+            mostRecentStudent.studentNumber,
+            ...existingNormalized.loggedStudentNumbers
+          ]).slice(0, MAX_ACCOUNT_SWITCHES_PER_DEVICE);
+        }
+      }
+      if (!existingLog.deviceName && mostRecentStudent?.deviceName) {
+        existingLog.deviceName = mostRecentStudent.deviceName;
+      }
+      if (!existingLog.osVersion && mostRecentStudent?.osVersion) {
+        existingLog.osVersion = mostRecentStudent.osVersion;
+      }
+    } else if (mostRecentStudent) {
+      // Synthesize a device activity log if a student registered on a device not yet in student_activity_logs
+      const studentIdsOnDevice = dedupeStudentIdsPreserveOrder(
+        deviceStudents.map((s) => s.studentNumber)
+      ).slice(0, MAX_ACCOUNT_SWITCHES_PER_DEVICE);
+      logMap.set(deviceId, {
+        id: deviceId,
+        installationId: deviceId,
+        studentNumber: deviceStudents[deviceStudents.length - 1].studentNumber,
+        currentStudentNumber: mostRecentStudent.studentNumber,
+        loggedStudentNumbers: studentIdsOnDevice,
+        dailyStudentNumbers: studentIdsOnDevice,
+        deviceName: mostRecentStudent.deviceName || "Android Device",
+        osVersion: mostRecentStudent.osVersion || "",
+        openCount: Math.max(1, deviceStudents.length),
+        dailySwitchCount: Math.min(MAX_ACCOUNT_SWITCHES_PER_DEVICE, studentIdsOnDevice.length),
+        status:
+          studentIdsOnDevice.length >= MAX_ACCOUNT_SWITCHES_PER_DEVICE
+            ? "limit_reached"
+            : studentIdsOnDevice.length > 1
+            ? "switched"
+            : "normal",
+        lastActiveAt: mostRecentStudent.rawTimestamp,
+        updatedAt: mostRecentStudent.rawTimestamp
+      });
+    }
+  }
+
+  const normalizedList = Array.from(logMap.values()).map((item) =>
+    normalizeStudentActivityLog(item.id, item)
+  );
+  const sorted = sortLogsNewestFirst(normalizedList);
+  return maxLimit > 0 ? sorted.slice(0, maxLimit) : sorted;
+}
+
+const inFlightAutoEncryptIds = new Set();
+
+async function autoEncryptPlaintextStudentDocs(rawLogDocs = [], rawStudentDocs = []) {
+  if (!auth?.currentUser) return;
+  try {
+    const catalogKey = await getCatalogCryptoKey();
+    const deviceKey = getActiveMasterCryptoKey() || catalogKey;
+
+    for (const logDoc of rawLogDocs) {
+      const docId = logDoc?.id;
+      if (!docId || inFlightAutoEncryptIds.has(`log:${docId}`)) continue;
+      const updates = {};
+      if (logDoc.deviceName && !String(logDoc.deviceName).startsWith(CIPHER_PREFIX)) {
+        updates.deviceName = await encryptVaultField(logDoc.deviceName, deviceKey);
+      }
+      if (logDoc.osVersion && !String(logDoc.osVersion).startsWith(CIPHER_PREFIX)) {
+        updates.osVersion = await encryptVaultField(logDoc.osVersion, deviceKey);
+      }
+      if (Object.keys(updates).length > 0) {
+        inFlightAutoEncryptIds.add(`log:${docId}`);
+        updateDoc(doc(db, STUDENT_ACTIVITY_LOGS_COLLECTION, docId), updates)
+          .catch(() => {})
+          .finally(() => inFlightAutoEncryptIds.delete(`log:${docId}`));
+      }
+    }
+
+    for (const stDoc of rawStudentDocs) {
+      const docId = stDoc?.id;
+      if (!docId || inFlightAutoEncryptIds.has(`st:${docId}`)) continue;
+      const updates = {};
+      if (stDoc.email && !String(stDoc.email).startsWith(CIPHER_PREFIX)) {
+        updates.email = await encryptVaultField(stDoc.email, catalogKey);
+      }
+      if (stDoc.deviceName && !String(stDoc.deviceName).startsWith(CIPHER_PREFIX)) {
+        updates.deviceName = await encryptVaultField(stDoc.deviceName, deviceKey);
+      }
+      if (stDoc.osVersion && !String(stDoc.osVersion).startsWith(CIPHER_PREFIX)) {
+        updates.osVersion = await encryptVaultField(stDoc.osVersion, deviceKey);
+      }
+      if (Object.keys(updates).length > 0) {
+        inFlightAutoEncryptIds.add(`st:${docId}`);
+        updateDoc(doc(db, STUDENTS_COLLECTION, docId), updates)
+          .catch(() => {})
+          .finally(() => inFlightAutoEncryptIds.delete(`st:${docId}`));
+      }
+    }
+  } catch {
+    // Non-blocking background encryption
+  }
+}
+
 /* =========================================================
    ONE-TIME FETCH ALL STUDENT ACTIVITY LOGS
    ========================================================= */
@@ -244,13 +434,27 @@ export async function getAllStudentActivityLogs(options = {}) {
   try {
     const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
     const logsQuery = maxLimit > 0 ? query(logsRef, limit(maxLimit)) : logsRef;
-    const snapshot = await getDocs(logsQuery);
+    const studentsRef = collection(db, STUDENTS_COLLECTION);
 
-    const logs = snapshot.docs.map((docSnap) =>
-      normalizeStudentActivityLog(docSnap.id, docSnap.data())
-    );
+    const [logsSnapshot, studentsSnapshot] = await Promise.all([
+      getDocs(logsQuery),
+      getDocs(studentsRef).catch(() => null)
+    ]);
 
-    return sortLogsNewestFirst(logs);
+    const rawLogs = logsSnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    }));
+    const rawStudents = studentsSnapshot
+      ? studentsSnapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }))
+      : [];
+
+    autoEncryptPlaintextStudentDocs(rawLogs, rawStudents);
+
+    return mergeActivityLogsWithStudents(rawLogs, rawStudents, maxLimit);
   } catch (err) {
     if (err?.code === "permission-denied" && !auth?.currentUser) {
       console.warn(
@@ -264,9 +468,10 @@ export async function getAllStudentActivityLogs(options = {}) {
 
 /* =========================================================
    REAL-TIME SUBSCRIPTION FOR STUDENT ACTIVITY LOGS
-   Waits for / reacts to Firebase Auth state restoration so
-   page reloads do not prematurely fail before auth hydrates.
-   Enforces server-side query limiting to protect Firestore read quotas.
+   Combines dual-collection onSnapshot (student_activity_logs + students)
+   with automatic reconnect, window focus/visibility sync, and a 2.5s
+   live heartbeat so new student logins/switches appear instantaneously
+   without requiring a manual browser refresh.
    ========================================================= */
 
 export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) {
@@ -279,14 +484,94 @@ export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) 
       ? options
       : (options?.maxLimit ?? DEFAULT_STUDENT_LOGS_QUERY_LIMIT);
 
-  let snapshotUnsubscribe = null;
+  let logsUnsubscribe = null;
+  let studentsUnsubscribe = null;
+  let retryTimer = null;
+  let pollInterval = null;
   let disposed = false;
 
+  let latestRawLogs = [];
+  let latestRawStudents = [];
+  let hasLogsSnapshot = false;
+
   const cleanupSnapshot = () => {
-    if (typeof snapshotUnsubscribe === "function") {
-      snapshotUnsubscribe();
-      snapshotUnsubscribe = null;
+    if (typeof logsUnsubscribe === "function") {
+      logsUnsubscribe();
+      logsUnsubscribe = null;
     }
+    if (typeof studentsUnsubscribe === "function") {
+      studentsUnsubscribe();
+      studentsUnsubscribe = null;
+    }
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const emitMergedLogs = () => {
+    if (disposed || !hasLogsSnapshot) {
+      return;
+    }
+    try {
+      autoEncryptPlaintextStudentDocs(latestRawLogs, latestRawStudents);
+      const merged = mergeActivityLogsWithStudents(
+        latestRawLogs,
+        latestRawStudents,
+        maxLimit
+      );
+      onUpdate(merged);
+    } catch (processErr) {
+      console.error(
+        "[StudentLogService] Error processing student logs:",
+        processErr
+      );
+      if (typeof onError === "function") {
+        onError(processErr);
+      }
+    }
+  };
+
+  const pollLatestSilently = async () => {
+    if (disposed || !auth?.currentUser) {
+      return;
+    }
+    try {
+      const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
+      const logsQuery = maxLimit > 0 ? query(logsRef, limit(maxLimit)) : logsRef;
+      const studentsRef = collection(db, STUDENTS_COLLECTION);
+
+      const [logsSnap, studentsSnap] = await Promise.all([
+        getDocs(logsQuery),
+        getDocs(studentsRef).catch(() => null)
+      ]);
+      if (disposed) return;
+
+      latestRawLogs = logsSnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      if (studentsSnap) {
+        latestRawStudents = studentsSnap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+      }
+      hasLogsSnapshot = true;
+      emitMergedLogs();
+    } catch {
+      // Ignore transient poll errors; onSnapshot remains active
+    }
+  };
+
+  const scheduleReconnect = () => {
+    if (disposed || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (!disposed) {
+        attachSnapshotListener();
+      }
+    }, 1500);
   };
 
   const attachSnapshotListener = () => {
@@ -299,26 +584,19 @@ export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) 
       const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
       const logsQuery = maxLimit > 0 ? query(logsRef, limit(maxLimit)) : logsRef;
 
-      snapshotUnsubscribe = onSnapshot(
+      logsUnsubscribe = onSnapshot(
         logsQuery,
+        { includeMetadataChanges: true },
         (snapshot) => {
           if (disposed) {
             return;
           }
-          try {
-            const logs = snapshot.docs.map((docSnap) =>
-              normalizeStudentActivityLog(docSnap.id, docSnap.data())
-            );
-            onUpdate(sortLogsNewestFirst(logs));
-          } catch (processErr) {
-            console.error(
-              "[StudentLogService] Error processing student logs:",
-              processErr
-            );
-            if (typeof onError === "function") {
-              onError(processErr);
-            }
-          }
+          latestRawLogs = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          }));
+          hasLogsSnapshot = true;
+          emitMergedLogs();
         },
         (snapshotErr) => {
           if (disposed) {
@@ -335,9 +613,26 @@ export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) 
             return;
           }
 
-          if (typeof onError === "function") {
-            onError(snapshotErr);
+          scheduleReconnect();
+        }
+      );
+
+      const studentsRef = collection(db, STUDENTS_COLLECTION);
+      studentsUnsubscribe = onSnapshot(
+        studentsRef,
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          if (disposed) {
+            return;
           }
+          latestRawStudents = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          }));
+          emitMergedLogs();
+        },
+        () => {
+          // Non-fatal if students listener reconnects later
         }
       );
     } catch (err) {
@@ -348,16 +643,45 @@ export function subscribeToStudentActivityLogs(onUpdate, onError, options = {}) 
       if (!disposed && typeof onError === "function") {
         onError(err);
       }
+      scheduleReconnect();
     }
   };
 
+  attachSnapshotListener();
+
   const authUnsubscribe = onAuthStateChanged(auth, () => {
     attachSnapshotListener();
+    pollLatestSilently();
   });
+
+  if (typeof window !== "undefined") {
+    pollInterval = window.setInterval(pollLatestSilently, 2500);
+    window.addEventListener("focus", pollLatestSilently);
+    window.addEventListener("online", pollLatestSilently);
+  }
+  const handleVisibilityChange = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      pollLatestSilently();
+    }
+  };
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+  }
 
   return () => {
     disposed = true;
     cleanupSnapshot();
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", pollLatestSilently);
+      window.removeEventListener("online", pollLatestSilently);
+    }
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }
     if (typeof authUnsubscribe === "function") {
       authUnsubscribe();
     }
@@ -430,6 +754,7 @@ export function subscribeToRegisteredStudentsCount(onCountUpdate, onError) {
 
   let logsUnsub = null;
   let studentsUnsub = null;
+  let pollInterval = null;
   let disposed = false;
 
   let latestStudentDocs = [];
@@ -446,6 +771,32 @@ export function subscribeToRegisteredStudentsCount(onCountUpdate, onError) {
       latestActivityDocs
     );
     onCountUpdate(count);
+  };
+
+  const pollCountSilently = async () => {
+    if (disposed || !auth?.currentUser) return;
+    try {
+      const [logsSnap, studentsSnap] = await Promise.all([
+        getDocs(collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION)),
+        getDocs(collection(db, STUDENTS_COLLECTION)).catch(() => null)
+      ]);
+      if (disposed) return;
+      latestActivityDocs = logsSnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      logsReady = true;
+      if (studentsSnap) {
+        latestStudentDocs = studentsSnap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+        studentsReady = true;
+      }
+      emitIfReady();
+    } catch {
+      // Ignore transient poll errors
+    }
   };
 
   const cleanupListeners = () => {
@@ -469,6 +820,7 @@ export function subscribeToRegisteredStudentsCount(onCountUpdate, onError) {
       const logsRef = collection(db, STUDENT_ACTIVITY_LOGS_COLLECTION);
       logsUnsub = onSnapshot(
         logsRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
           if (disposed) return;
           latestActivityDocs = snapshot.docs.map((docSnap) => ({
@@ -498,6 +850,7 @@ export function subscribeToRegisteredStudentsCount(onCountUpdate, onError) {
       const studentsRef = collection(db, STUDENTS_COLLECTION);
       studentsUnsub = onSnapshot(
         studentsRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
           if (disposed) return;
           latestStudentDocs = snapshot.docs.map((docSnap) => ({
@@ -529,13 +882,30 @@ export function subscribeToRegisteredStudentsCount(onCountUpdate, onError) {
     }
   };
 
+  attachListeners();
+
   const authUnsubscribe = onAuthStateChanged(auth, () => {
     attachListeners();
+    pollCountSilently();
   });
+
+  if (typeof window !== "undefined") {
+    pollInterval = window.setInterval(pollCountSilently, 2500);
+    window.addEventListener("focus", pollCountSilently);
+    window.addEventListener("online", pollCountSilently);
+  }
 
   return () => {
     disposed = true;
     cleanupListeners();
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", pollCountSilently);
+      window.removeEventListener("online", pollCountSilently);
+    }
     if (typeof authUnsubscribe === "function") {
       authUnsubscribe();
     }

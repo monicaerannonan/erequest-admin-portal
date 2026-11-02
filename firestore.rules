@@ -452,7 +452,7 @@ service cloud.firestore {
           !('loggedStudentNumbers' in data) ||
           (
             isValidStudentNumberList10(data.loggedStudentNumbers) &&
-            (data.loggedStudentNumbers.size() == 0 || !('currentStudentNumber' in data) || data.loggedStudentNumbers[0] == data.currentStudentNumber)
+            (data.loggedStudentNumbers.size() == 0 || !('currentStudentNumber' in data) || data.currentStudentNumber in data.loggedStudentNumbers)
           )
         ) &&
         (
@@ -723,8 +723,12 @@ service cloud.firestore {
             request.resource.data.status == 'active' &&
             areImmutableFieldsUnchanged([
               'studentNumber', 'campusCode', 'enrollmentYear',
-              'studentDigits', 'email', 'registeredAt'
-            ])
+              'studentDigits', 'registeredAt'
+            ]) &&
+            (
+              request.resource.data.email == resource.data.email ||
+              (resource.data.email is string && resource.data.email.matches('^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$'))
+            )
           )
         );
 
