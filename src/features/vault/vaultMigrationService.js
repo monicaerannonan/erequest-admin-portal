@@ -277,13 +277,13 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const updates = {};
 
       if (data.department && !String(data.department).startsWith(CIPHER_PREFIX)) {
-        updates.department = await encryptVaultField(data.department, cryptoKey);
+        updates.department = await encryptVaultField(data.department, catalogKey);
       }
       if (data.position && !String(data.position).startsWith(CIPHER_PREFIX)) {
-        updates.position = await encryptVaultField(data.position, cryptoKey);
+        updates.position = await encryptVaultField(data.position, catalogKey);
       }
       if (data.phone && !String(data.phone).startsWith(CIPHER_PREFIX)) {
-        updates.phone = await encryptVaultField(data.phone, cryptoKey);
+        updates.phone = await encryptVaultField(data.phone, catalogKey);
       }
 
       if (Object.keys(updates).length > 0) {

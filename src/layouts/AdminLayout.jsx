@@ -14,6 +14,13 @@ import "./AdminLayout.css";
 
 const OFFICIAL_LOGO_URL = `${import.meta.env.BASE_URL}logo.png`;
 
+function sanitizeAdminDisplay(val, fallback) {
+  if (!val) return fallback;
+  const str = String(val).trim();
+  if (str.startsWith("enc:v1:")) return fallback;
+  return str;
+}
+
 
 /* =========================================================
    SIMPLE SVG ICONS
@@ -426,16 +433,16 @@ function AdminLayout() {
 
                 <span
                   className="admin-user-position"
-                  title={profile?.position || "System Administrator"}
+                  title={sanitizeAdminDisplay(profile?.position, "System Administrator")}
                 >
-                  {profile?.position || "System Administrator"}
+                  {sanitizeAdminDisplay(profile?.position, "System Administrator")}
                 </span>
 
                 <span
                   className="admin-user-department"
-                  title={profile?.department || "Registrar's Office"}
+                  title={sanitizeAdminDisplay(profile?.department, "Registrar's Office")}
                 >
-                  {profile?.department || "Registrar's Office"}
+                  {sanitizeAdminDisplay(profile?.department, "Registrar's Office")}
                 </span>
 
               </div>

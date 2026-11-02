@@ -12,6 +12,7 @@ import {
   isSameAsOlderPassword,
   DEFAULT_ADMIN_EMAIL
 } from "./authService";
+import { useVault } from "../vault/VaultContext";
 import "./LoginPage.css";
 
 const OFFICIAL_LOGO_URL = `${import.meta.env.BASE_URL}logo.png`;
@@ -19,6 +20,11 @@ const OFFICIAL_LOGO_URL = `${import.meta.env.BASE_URL}logo.png`;
 function LoginPage({ initialMode = "login" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const {
+    refreshVaultConfig,
+    unlockWithPassword,
+    setupMasterKey
+  } = useVault();
 
   // Helper to determine starting mode based on route path, search params, state, or prop
   const resolveInitialMode = () => {
@@ -43,6 +49,10 @@ function LoginPage({ initialMode = "login" }) {
   const [email, setEmail] = useState(DEFAULT_ADMIN_EMAIL);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Database Master Secret Key (Password 2) state
+  const [masterKey, setMasterKey] = useState("");
+  const [showMasterKey, setShowMasterKey] = useState(false);
 
   // Forgot password & OTP state
   const [resetEmail, setResetEmail] = useState(DEFAULT_ADMIN_EMAIL);
@@ -135,8 +145,23 @@ function LoginPage({ initialMode = "login" }) {
       setLoading(true);
 
       const result = await loginAdmin(cleanEmail, password);
-
       console.log("Admin login successful:", result.user.email);
+
+      // If administrator entered Password 2, unlock or initialize vault in the background
+      const cleanMasterKey = masterKey.trim();
+      if (cleanMasterKey) {
+        try {
+          const cfg = await refreshVaultConfig();
+          if (cfg && cfg.isConfigured) {
+            await unlockWithPassword(cleanMasterKey);
+          } else {
+            await setupMasterKey(cleanMasterKey);
+          }
+        } catch (vaultErr) {
+          console.warn("[LoginPage] Optional master key notice:", vaultErr?.message || vaultErr);
+          // Never block login. If master key is invalid, vault remains locked and admin can unlock later
+        }
+      }
 
       // Successful admin login -> route to dashboard
       navigate("/dashboard", {
@@ -446,6 +471,36 @@ function LoginPage({ initialMode = "login" }) {
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
+            </div>
+
+            <div className="form-group">
+              <div className="login-label-row">
+                <label htmlFor="master-key">Master Secret Key (Password 2)</label>
+                <span className="login-optional-tag">Optional</span>
+              </div>
+              <div className="password-field">
+                <input
+                  id="master-key"
+                  type={showMasterKey ? "text" : "password"}
+                  placeholder="Enter master key (optional)"
+                  value={masterKey}
+                  onChange={(event) => setMasterKey(event.target.value)}
+                  disabled={loading}
+                  autoComplete="off"
+                />
+
+                <button
+                  type="button"
+                  className="show-password-button"
+                  onClick={() => setShowMasterKey(!showMasterKey)}
+                  disabled={loading}
+                >
+                  {showMasterKey ? "Hide" : "Show"}
+                </button>
+              </div>
+              <span className="login-field-hint">
+                Optional. Leave blank to log in normally without entering master secret key.
+              </span>
             </div>
 
             <div className="login-helper-row">

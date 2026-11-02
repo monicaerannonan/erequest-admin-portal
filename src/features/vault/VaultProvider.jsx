@@ -55,19 +55,11 @@ export function VaultProvider({ children }) {
         setIsCheckingSession(true);
         const cfg = await refreshVaultConfig();
         if (cfg && cfg.isConfigured) {
-          // Attempt session restore
+          // Attempt session restore silently if cached
           const cachedKey = await restoreVaultSession(cfg);
           if (cachedKey) {
             setVaultKey(cachedKey);
-          } else {
-            // Vault is configured but locked -> open unlock modal
-            setModalMode("unlock");
-            setIsModalOpen(true);
           }
-        } else {
-          // Not configured -> open setup modal
-          setModalMode("setup");
-          setIsModalOpen(true);
         }
         setIsCheckingSession(false);
       } else {

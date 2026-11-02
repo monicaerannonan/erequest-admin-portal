@@ -110,6 +110,13 @@ function LockIcon() {
    ADMIN PROFILE PAGE COMPONENT
    ========================================================= */
 
+function sanitizeDisplayField(val, fallback = "") {
+  if (!val) return fallback;
+  const str = String(val).trim();
+  if (str.startsWith("enc:v1:")) return fallback;
+  return str;
+}
+
 function AdminProfilePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -129,9 +136,9 @@ function AdminProfilePage() {
 
   // Form State
   const [name, setName] = useState(() => profile?.name || "");
-  const [position, setPosition] = useState(() => profile?.position || "");
-  const [department, setDepartment] = useState(() => profile?.department || "");
-  const [phone, setPhone] = useState(() => profile?.phone || "");
+  const [position, setPosition] = useState(() => sanitizeDisplayField(profile?.position, "System Administrator"));
+  const [department, setDepartment] = useState(() => sanitizeDisplayField(profile?.department, "Registrar's Office"));
+  const [phone, setPhone] = useState(() => sanitizeDisplayField(profile?.phone, ""));
   const [photoUrl, setPhotoUrl] = useState(() => profile?.photoUrl || "");
 
   // Track previous profile reference to adjust form state when remote Firestore changes arrive (cross-device sync)
@@ -140,9 +147,9 @@ function AdminProfilePage() {
     setPrevProfile(profile);
     if (!isEditing && !isDirty && profile) {
       setName(profile.name || "");
-      setPosition(profile.position || "");
-      setDepartment(profile.department || "");
-      setPhone(profile.phone || "");
+      setPosition(sanitizeDisplayField(profile.position, "System Administrator"));
+      setDepartment(sanitizeDisplayField(profile.department, "Registrar's Office"));
+      setPhone(sanitizeDisplayField(profile.phone, ""));
       if (typeof profile.photoUrl === "string") {
         setPhotoUrl(profile.photoUrl);
       }
@@ -168,9 +175,9 @@ function AdminProfilePage() {
     setSuccessMessage("");
     setErrorMessage("");
     setName(profile?.name || "");
-    setPosition(profile?.position || "");
-    setDepartment(profile?.department || "");
-    setPhone(profile?.phone || "");
+    setPosition(sanitizeDisplayField(profile?.position, "System Administrator"));
+    setDepartment(sanitizeDisplayField(profile?.department, "Registrar's Office"));
+    setPhone(sanitizeDisplayField(profile?.phone, ""));
     setPhotoUrl(
       typeof profile?.photoUrl === "string" && profile.photoUrl
         ? profile.photoUrl
@@ -184,9 +191,9 @@ function AdminProfilePage() {
     if (e) e.preventDefault();
     setErrorMessage("");
     setName(profile?.name || "");
-    setPosition(profile?.position || "");
-    setDepartment(profile?.department || "");
-    setPhone(profile?.phone || "");
+    setPosition(sanitizeDisplayField(profile?.position, "System Administrator"));
+    setDepartment(sanitizeDisplayField(profile?.department, "Registrar's Office"));
+    setPhone(sanitizeDisplayField(profile?.phone, ""));
     setPhotoUrl(
       typeof profile?.photoUrl === "string" ? profile.photoUrl : ""
     );
@@ -424,16 +431,16 @@ function AdminProfilePage() {
               <BriefcaseIcon />
               <strong>Position:</strong>{" "}
               {isEditing
-                ? position || profile?.position || "System Administrator"
-                : profile?.position || position || "System Administrator"}
+                ? sanitizeDisplayField(position || profile?.position, "System Administrator")
+                : sanitizeDisplayField(profile?.position || position, "System Administrator")}
             </span>
 
             <span className="admin-profile-meta-item" title="Department">
               <BuildingIcon />
               <strong>Department:</strong>{" "}
               {isEditing
-                ? department || profile?.department || "Registrar's Office"
-                : profile?.department || department || "Registrar's Office"}
+                ? sanitizeDisplayField(department || profile?.department, "Registrar's Office")
+                : sanitizeDisplayField(profile?.department || department, "Registrar's Office")}
             </span>
 
             <span className="admin-profile-meta-item" title="Email">

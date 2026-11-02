@@ -18,6 +18,12 @@ import {
 
 import { addActivityLog } from "../dashboard/activityLogService.js";
 import { uploadProcedureImage } from "../../services/cloudinaryService.js";
+import {
+  encryptCatalogField,
+  decryptCatalogField,
+  catalogDecryptedCache,
+  CIPHER_PREFIX
+} from "../../utils/vaultCrypto.js";
 
 export const DEFAULT_PROFILE = {
   name: "Admin User",
@@ -247,6 +253,7 @@ export function cacheAdminProfile(profileData, userId) {
 /**
  * Normalizes raw admin document data against defaults.
  * Cloud-First: Always prefers live Firestore data over any local fallback.
+ * Checks the in-memory decrypted catalog cache so ciphertext is never displayed as raw enc:v1:.
  */
 export function normalizeProfileData(raw = {}, uid, fallback = null) {
   const currentEmail =
@@ -257,24 +264,97 @@ export function normalizeProfileData(raw = {}, uid, fallback = null) {
       ? raw.photoUrl
       : fallback?.photoUrl ?? auth.currentUser?.photoURL ?? "";
 
+  const rawPosition = raw.position || fallback?.position || DEFAULT_PROFILE.position;
+  const rawDepartment = raw.department || fallback?.department || DEFAULT_PROFILE.department;
+  const rawPhone = raw.phone || fallback?.phone || "";
+
+  // Check in-memory decrypted cache, or if still raw cipher without cached decrypt, use human-readable fallback
+  const resolvedPosition =
+    catalogDecryptedCache.get(rawPosition) ||
+    (String(rawPosition).startsWith(CIPHER_PREFIX)
+      ? (fallback?.position && !String(fallback.position).startsWith(CIPHER_PREFIX)
+          ? fallback.position
+          : DEFAULT_PROFILE.position)
+      : rawPosition);
+
+  const resolvedDepartment =
+    catalogDecryptedCache.get(rawDepartment) ||
+    (String(rawDepartment).startsWith(CIPHER_PREFIX)
+      ? (fallback?.department && !String(fallback.department).startsWith(CIPHER_PREFIX)
+          ? fallback.department
+          : DEFAULT_PROFILE.department)
+      : rawDepartment);
+
+  const resolvedPhone =
+    catalogDecryptedCache.get(rawPhone) ||
+    (String(rawPhone).startsWith(CIPHER_PREFIX)
+      ? (fallback?.phone && !String(fallback.phone).startsWith(CIPHER_PREFIX)
+          ? fallback.phone
+          : "")
+      : rawPhone);
+
   return {
     name:
       raw.name ||
       auth.currentUser?.displayName ||
       fallback?.name ||
       DEFAULT_PROFILE.name,
-    position:
-      raw.position || fallback?.position || DEFAULT_PROFILE.position,
-    department:
-      raw.department || fallback?.department || DEFAULT_PROFILE.department,
+    position: resolvedPosition,
+    department: resolvedDepartment,
     email: currentEmail,
-    phone: raw.phone || fallback?.phone || "",
+    phone: resolvedPhone,
     photoUrl: resolvedPhotoUrl,
     role:
       raw.role === "admin"
         ? "Administrator"
         : raw.role || fallback?.role || "Administrator",
     updatedAt: raw.updatedAt || fallback?.updatedAt || null
+  };
+}
+
+/**
+ * Asynchronously normalizes raw admin document data, decrypting any encrypted
+ * fields (position, department, phone) with bank-grade AES-256.
+ */
+export async function normalizeProfileDataAsync(raw = {}, uid, fallback = null) {
+  const rawPosition = raw.position || fallback?.position || DEFAULT_PROFILE.position;
+  const rawDepartment = raw.department || fallback?.department || DEFAULT_PROFILE.department;
+  const rawPhone = raw.phone || fallback?.phone || "";
+
+  let decryptedPosition = rawPosition;
+  let decryptedDepartment = rawDepartment;
+  let decryptedPhone = rawPhone;
+
+  try {
+    const [p, d, ph] = await Promise.all([
+      decryptCatalogField(rawPosition),
+      decryptCatalogField(rawDepartment),
+      decryptCatalogField(rawPhone)
+    ]);
+    decryptedPosition = p || DEFAULT_PROFILE.position;
+    decryptedDepartment = d || DEFAULT_PROFILE.department;
+    decryptedPhone = ph || "";
+  } catch (err) {
+    console.warn("[ProfileService] Decryption notice:", err);
+  }
+
+  // If decryption failed and still has cipher prefix, revert to default
+  if (String(decryptedPosition).startsWith(CIPHER_PREFIX)) {
+    decryptedPosition = DEFAULT_PROFILE.position;
+  }
+  if (String(decryptedDepartment).startsWith(CIPHER_PREFIX)) {
+    decryptedDepartment = DEFAULT_PROFILE.department;
+  }
+  if (String(decryptedPhone).startsWith(CIPHER_PREFIX)) {
+    decryptedPhone = "";
+  }
+
+  const base = normalizeProfileData(raw, uid, fallback);
+  return {
+    ...base,
+    position: decryptedPosition,
+    department: decryptedDepartment,
+    phone: decryptedPhone
   };
 }
 
@@ -297,7 +377,7 @@ export async function getAdminProfile(userId) {
     const snap = await getDoc(adminDocRef);
 
     if (snap.exists()) {
-      return normalizeProfileData(snap.data(), currentUid);
+      return await normalizeProfileDataAsync(snap.data(), currentUid);
     }
   } catch (err) {
     console.warn("Firestore admin profile read notice:", err.message);
@@ -364,11 +444,21 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
 
   const nowIso = new Date().toISOString();
 
+  // Encrypt position, department, and phone with AES-256 for Firestore storage
+  const encryptedPosition = await encryptCatalogField(cleanPosition);
+  const encryptedDepartment = await encryptCatalogField(cleanDepartment);
+  const encryptedPhone = cleanPhone ? await encryptCatalogField(cleanPhone) : "";
+
+  // Prime local decrypted cache immediately
+  if (encryptedPosition) catalogDecryptedCache.set(encryptedPosition, cleanPosition);
+  if (encryptedDepartment) catalogDecryptedCache.set(encryptedDepartment, cleanDepartment);
+  if (encryptedPhone) catalogDecryptedCache.set(encryptedPhone, cleanPhone);
+
   const payload = {
     name: cleanName,
-    position: cleanPosition,
-    department: cleanDepartment,
-    phone: cleanPhone,
+    position: encryptedPosition,
+    department: encryptedDepartment,
+    phone: encryptedPhone,
     photoUrl: cleanPhotoUrl,
     email: currentEmail,
     role: "admin",
@@ -388,9 +478,9 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
         compRef,
         {
           name: cleanName,
-          position: cleanPosition,
-          department: cleanDepartment,
-          phone: cleanPhone,
+          position: encryptedPosition,
+          department: encryptedDepartment,
+          phone: encryptedPhone,
           photoUrl: cleanPhotoUrl,
           role: "admin",
           updatedAt: nowIso
@@ -434,7 +524,16 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
     console.warn("Profile activity log notice:", logErr.message);
   });
 
-  const resolvedProfile = normalizeProfileData(payload, currentUid);
+  const resolvedProfile = {
+    name: cleanName,
+    position: cleanPosition,
+    department: cleanDepartment,
+    phone: cleanPhone,
+    photoUrl: cleanPhotoUrl,
+    email: currentEmail,
+    role: "Administrator",
+    updatedAt: nowIso
+  };
 
   return {
     success: true,
@@ -516,11 +615,11 @@ function subscribeToAdminDoc(uid, onUpdate, onError) {
 
     const unsubscribe = onSnapshot(
       adminDocRef,
-      (snapshot) => {
+      async (snapshot) => {
         try {
           if (snapshot.exists()) {
             const data = snapshot.data();
-            const resolved = normalizeProfileData(data, uid);
+            const resolved = await normalizeProfileDataAsync(data, uid);
 
             // Notify local tab listeners
             if (typeof window !== "undefined") {
@@ -539,9 +638,9 @@ function subscribeToAdminDoc(uid, onUpdate, onError) {
             if (uid !== PRIMARY_ADMIN_UID) {
               const primaryRef = doc(db, "admins", PRIMARY_ADMIN_UID);
               getDoc(primaryRef)
-                .then((pSnap) => {
+                .then(async (pSnap) => {
                   if (pSnap.exists()) {
-                    onUpdate(normalizeProfileData(pSnap.data(), uid));
+                    onUpdate(await normalizeProfileDataAsync(pSnap.data(), uid));
                   } else {
                     onUpdate({
                       ...DEFAULT_PROFILE,

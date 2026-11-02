@@ -155,8 +155,10 @@ export async function encryptCatalogField(text) {
   return await encryptVaultField(text, catalogKey);
 }
 
+export const catalogDecryptedCache = new Map();
+
 /**
- * Decrypts a catalog field (services, transactions, requirements, etc.)
+ * Decrypts a catalog field (services, transactions, requirements, admin position/dept, etc.)
  * using the deterministic catalog encryption key.
  * If not encrypted or if decryption fails, returns original text.
  */
@@ -164,8 +166,15 @@ export async function decryptCatalogField(ciphertext) {
   if (ciphertext === null || ciphertext === undefined) return ciphertext;
   const str = String(ciphertext);
   if (!str.startsWith(CIPHER_PREFIX)) return str;
+  if (catalogDecryptedCache.has(str)) {
+    return catalogDecryptedCache.get(str);
+  }
   const catalogKey = await getCatalogCryptoKey();
-  return await decryptVaultField(str, catalogKey, str);
+  const decrypted = await decryptVaultField(str, catalogKey, str);
+  if (decrypted && !decrypted.startsWith(CIPHER_PREFIX)) {
+    catalogDecryptedCache.set(str, decrypted);
+  }
+  return decrypted;
 }
 
 /**
