@@ -728,12 +728,14 @@ service cloud.firestore {
     }
 
     // 12. VAULT CONFIG COLLECTION
-    // Read: Authorized administrators only
+    // Get: Publicly readable for master password challenge verification (canary fetch)
+    // List: Authorized administrators only
     // Create: Authorized administrators only with strict schema validation
     // Update: Authorized administrators only, createdAt immutable, with strict schema validation
     // Delete: Strictly forbidden
     match /vault_config/{configId} {
-      allow read: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
+      allow get: if true;
+      allow list: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
       allow create: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail()) && isValidVaultConfig(request.resource.data);
       allow update: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail()) && areImmutableFieldsUnchanged(['createdAt']) && isValidVaultConfig(request.resource.data);
       allow delete: if false;

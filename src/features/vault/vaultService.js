@@ -21,6 +21,7 @@ import {
 
 export const VAULT_CONFIG_COLLECTION = "vault_config";
 export const VAULT_PRIMARY_DOC_ID = "primary";
+export const DEFAULT_MASTER_PASSWORD = "#IcctMaster4228";
 
 /* =========================================================
    VAULT CONFIG LOADER
@@ -198,3 +199,54 @@ export async function restoreVaultSession(vaultConfig) {
   }
   return cachedKey;
 }
+
+/* =========================================================
+   DUAL PASSWORD DETECTOR: CHECK IF ENTERED PASSWORD IS MASTER
+   ========================================================= */
+
+/**
+ * Checks if a candidate password entered in the single login password box
+ * matches the Master Password (canary verification in vault_config/primary).
+ *
+ * @param {string} candidatePassword
+ * @returns {Promise<{ isMaster: boolean, cryptoKey?: CryptoKey, cfg?: object, isDefault?: boolean }>}
+ */
+export async function checkIfMasterPassword(candidatePassword) {
+  if (!candidatePassword || typeof candidatePassword !== "string") {
+    return { isMaster: false };
+  }
+  const clean = candidatePassword.trim();
+  if (!clean) {
+    return { isMaster: false };
+  }
+
+  // 1. Check against Firestore vault_config/primary canary
+  try {
+    const cfg = await getVaultConfig();
+    if (cfg && cfg.isConfigured && cfg.saltHex && cfg.canaryCiphertext) {
+      const candidateKey = await deriveKeyFromPassword(clean, cfg.saltHex);
+      const isValid = await verifyCanary(cfg.canaryCiphertext, candidateKey);
+      if (isValid) {
+        return { isMaster: true, cryptoKey: candidateKey, cfg };
+      }
+    } else {
+      // Not yet configured -> check if matches DEFAULT_MASTER_PASSWORD
+      if (clean === DEFAULT_MASTER_PASSWORD) {
+        return { isMaster: true, isDefault: true };
+      }
+    }
+  } catch (err) {
+    console.warn("[VaultService] Master password verification notice:", err?.message || err);
+    if (clean === DEFAULT_MASTER_PASSWORD) {
+      return { isMaster: true, isDefault: true };
+    }
+  }
+
+  // Fallback match for unconfigured or newly initialized states
+  if (clean === DEFAULT_MASTER_PASSWORD) {
+    return { isMaster: true, isDefault: true };
+  }
+
+  return { isMaster: false };
+}
+

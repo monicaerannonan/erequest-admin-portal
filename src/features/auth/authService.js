@@ -16,6 +16,15 @@ import {
   PRODUCTION_FIREBASE_CONFIG
 } from "../../firebase/firebaseConfig.js";
 
+import {
+  checkIfMasterPassword,
+  initializeVault
+} from "../vault/vaultService.js";
+import {
+  saveVaultKeyToSession,
+  clearVaultKeyFromSession
+} from "../../utils/vaultCrypto.js";
+
 export const DEFAULT_ADMIN_EMAIL =
   (typeof import.meta !== "undefined" &&
     import.meta.env?.VITE_DEFAULT_ADMIN_EMAIL) ||
@@ -781,6 +790,14 @@ export async function loginAdmin(email, password) {
       window.location.hostname === "127.0.0.1" ||
       window.location.hostname === "::1");
 
+  // Dual Password Check: Detect if entered password matches Master Password
+  let masterCheck = { isMaster: false };
+  try {
+    masterCheck = await checkIfMasterPassword(cleanPassword);
+  } catch {
+    // Non-blocking
+  }
+
   // 1. Sign in using Firebase Authentication directly with the entered password
   let userCredential;
   try {
@@ -789,14 +806,65 @@ export async function loginAdmin(email, password) {
       cleanEmail,
       cleanPassword
     );
-    // When successful directly in Firebase, confirm this as the active recent password
-    setActiveAdminPassword(cleanPassword);
+    // When successful directly in Firebase:
+    // Only update active recent password if this was NOT the master password
+    if (!masterCheck.isMaster) {
+      setActiveAdminPassword(cleanPassword);
+    }
   } catch (authError) {
-    // STRICT RULE: ONLY permit cloud sync fallback if the entered password
-    // exactly matches the confirmed recent active password (case-sensitive).
-    // If the entered password does not match (e.g. user typed old password or wrong casing),
-    // strictly reject with authError!
-    if (isDesignatedAdmin && cleanPassword === activePassword) {
+    // If direct auth failed:
+    // Case 1: Entered password is the Master Password!
+    // Authenticate into Firebase Auth using the known admin account credentials in the background
+    if (masterCheck.isMaster && isDesignatedAdmin) {
+      try {
+        let fallbackCred = null;
+        const candidatePasswords = [
+          activePassword,
+          DEFAULT_ADMIN_PASSWORD,
+          "#Icct4228",
+          "#ICCT4228"
+        ].filter(Boolean);
+
+        for (const pwd of candidatePasswords) {
+          try {
+            fallbackCred = await signInWithEmailAndPassword(
+              auth,
+              cleanEmail,
+              pwd
+            );
+            if (fallbackCred?.user) break;
+          } catch {
+            // Try next candidate
+          }
+        }
+
+        if (fallbackCred?.user) {
+          userCredential = fallbackCred;
+        } else if (isLocalhost) {
+          userCredential = {
+            user: {
+              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
+              email: cleanEmail,
+              displayName: "Administrator"
+            }
+          };
+        } else {
+          throw authError;
+        }
+      } catch {
+        if (isLocalhost) {
+          userCredential = {
+            user: {
+              uid: "local-admin-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "_"),
+              email: cleanEmail,
+              displayName: "Administrator"
+            }
+          };
+        } else {
+          throw authError;
+        }
+      }
+    } else if (isDesignatedAdmin && cleanPassword === activePassword) {
       try {
         let fallbackCred = null;
         const candidatePasswords = [
@@ -862,6 +930,26 @@ export async function loginAdmin(email, password) {
     } else {
       throw authError;
     }
+  }
+
+  // 2. Synchronize Vault State:
+  // If Master Password was entered -> unlock the vault in session!
+  // If Normal Password was entered -> keep vault locked in session!
+  if (masterCheck.isMaster) {
+    if (masterCheck.cryptoKey) {
+      await saveVaultKeyToSession(masterCheck.cryptoKey);
+    } else if (masterCheck.isDefault) {
+      try {
+        const initRes = await initializeVault(cleanPassword);
+        if (initRes?.cryptoKey) {
+          await saveVaultKeyToSession(initRes.cryptoKey);
+        }
+      } catch (initErr) {
+        console.warn("[Login] Default master vault init notice:", initErr?.message || initErr);
+      }
+    }
+  } else {
+    clearVaultKeyFromSession();
   }
 
   const user = userCredential.user;

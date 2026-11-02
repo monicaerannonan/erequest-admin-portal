@@ -107,3 +107,23 @@ test("decryptCatalogField handles plaintext legacy input gracefully", async () =
   const result = await decryptCatalogField(plain);
   assert.equal(result, plain);
 });
+
+test("checkIfMasterPassword detects default master password and rejects normal password", async () => {
+  const { checkIfMasterPassword, DEFAULT_MASTER_PASSWORD } = await import("../src/features/vault/vaultService.js");
+  const { terminate } = await import("firebase/firestore");
+  const { db } = await import("../src/firebase/firebaseConfig.js");
+
+  // Default master password check
+  const masterCheck = await checkIfMasterPassword(DEFAULT_MASTER_PASSWORD);
+  assert.equal(masterCheck.isMaster, true);
+
+  // Normal password should not match master password
+  const normalCheck = await checkIfMasterPassword("#Icct4228");
+  assert.equal(normalCheck.isMaster, false);
+
+  // Invalid / empty password
+  const emptyCheck = await checkIfMasterPassword("");
+  assert.equal(emptyCheck.isMaster, false);
+
+  await terminate(db).catch(() => {});
+});

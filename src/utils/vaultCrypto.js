@@ -170,9 +170,23 @@ export async function decryptCatalogField(ciphertext) {
     return catalogDecryptedCache.get(str);
   }
   const catalogKey = await getCatalogCryptoKey();
-  const decrypted = await decryptVaultField(str, catalogKey, str);
+  let decrypted = await decryptVaultField(str, catalogKey, str);
   if (decrypted && !decrypted.startsWith(CIPHER_PREFIX)) {
     catalogDecryptedCache.set(str, decrypted);
+    return decrypted;
+  }
+  // Fallback: If ciphertext was encrypted with Master Key (e.g. from prior migration), try session vault key
+  try {
+    const sessionKey = await loadVaultKeyFromSession();
+    if (sessionKey) {
+      const vaultDecrypted = await decryptVaultField(str, sessionKey, str);
+      if (vaultDecrypted && !vaultDecrypted.startsWith(CIPHER_PREFIX)) {
+        catalogDecryptedCache.set(str, vaultDecrypted);
+        return vaultDecrypted;
+      }
+    }
+  } catch {
+    // Continue
   }
   return decrypted;
 }

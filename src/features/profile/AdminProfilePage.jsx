@@ -760,12 +760,12 @@ function AdminProfilePage() {
 
               <div className="admin-profile-summary-item">
                 <span className="summary-label">Position</span>
-                <strong className="summary-value">{profile?.position || "System Administrator"}</strong>
+                <strong className="summary-value">{sanitizeDisplayField(profile?.position, "System Administrator")}</strong>
               </div>
 
               <div className="admin-profile-summary-item">
                 <span className="summary-label">Department</span>
-                <strong className="summary-value">{profile?.department || "Registrar's Office"}</strong>
+                <strong className="summary-value">{sanitizeDisplayField(profile?.department, "Registrar's Office")}</strong>
               </div>
 
               <div className="admin-profile-summary-item">
