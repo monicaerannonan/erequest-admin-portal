@@ -7,6 +7,7 @@ import {
   getAllStudentActivityLogs,
   subscribeToStudentActivityLogs
 } from "./studentLogService";
+import { useVault } from "../vault/VaultContext";
 
 import "./StudentActivityLogsPage.css";
 
@@ -156,7 +157,9 @@ function truncateInstallationId(uuid = "") {
    ========================================================= */
 
 function StudentActivityLogsPage() {
+  const { vaultKey, decryptText } = useVault();
   const [logs, setLogs] = useState([]);
+  const [decryptedMap, setDecryptedMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -165,6 +168,29 @@ function StudentActivityLogsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedId, setCopiedId] = useState("");
   const [openDropdownRowId, setOpenDropdownRowId] = useState("");
+
+  /* Decrypt encrypted fields in real time */
+  useEffect(() => {
+    let active = true;
+    async function decryptAll() {
+      const map = {};
+      for (const log of logs) {
+        if (log.deviceName && String(log.deviceName).startsWith("enc:v1:")) {
+          map[log.deviceName] = await decryptText(log.deviceName);
+        }
+        if (log.osVersion && String(log.osVersion).startsWith("enc:v1:")) {
+          map[log.osVersion] = await decryptText(log.osVersion);
+        }
+      }
+      if (active) {
+        setDecryptedMap(map);
+      }
+    }
+    decryptAll();
+    return () => {
+      active = false;
+    };
+  }, [logs, vaultKey, decryptText]);
 
   useEffect(() => {
     if (!openDropdownRowId) return undefined;
@@ -300,16 +326,19 @@ function StudentActivityLogsPage() {
           )
         : false;
 
+      const resolvedDevice = (decryptedMap[item.deviceName] || item.deviceName).toLowerCase();
+      const resolvedOs = (decryptedMap[item.osVersion] || item.osVersion).toLowerCase();
+
       return (
         item.studentNumber.toLowerCase().includes(cleanQuery) ||
         item.currentStudentNumber.toLowerCase().includes(cleanQuery) ||
         matchesLoggedList ||
-        item.deviceName.toLowerCase().includes(cleanQuery) ||
-        item.osVersion.toLowerCase().includes(cleanQuery) ||
+        resolvedDevice.includes(cleanQuery) ||
+        resolvedOs.includes(cleanQuery) ||
         item.installationId.toLowerCase().includes(cleanQuery)
       );
     });
-  }, [logs, searchQuery, statusFilter]);
+  }, [logs, decryptedMap, searchQuery, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -665,11 +694,11 @@ function StudentActivityLogsPage() {
                         {/* 3. DEVICE NAME */}
                         <td>
                           <div className="student-device-name">
-                            {log.deviceName}
+                            {decryptedMap[log.deviceName] || log.deviceName}
                           </div>
                           {log.osVersion && (
                             <div className="student-cell-subtext">
-                              {log.osVersion}
+                              {decryptedMap[log.osVersion] || log.osVersion}
                             </div>
                           )}
                         </td>

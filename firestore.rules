@@ -10,10 +10,10 @@ service cloud.firestore {
     // Document ID: {userId} (Firebase Auth UID of administrator)
     // Fields:
     //   - name: string (required, 2-100 chars) - Full name of administrator
-    //   - position: string (required, 2-100 chars) - Role/position designation
-    //   - department: string (required, 2-100 chars) - Office/department assignment
+    //   - position: string (required, 2-500 chars) - Role/position designation (expanded for encrypted ciphertext)
+    //   - department: string (required, 2-500 chars) - Office/department assignment (expanded for encrypted ciphertext)
     //   - email: string (required, 5-150 chars, valid email format) - Admin email
-    //   - phone: string (optional, 0-30 chars) - Contact phone number
+    //   - phone: string (optional, 0-500 chars) - Contact phone number (expanded for encrypted ciphertext)
     //   - photoUrl: string (optional, 0-200000 chars) - Profile picture HTTPS URL or compressed data URI
     //   - role: string (required, exact value 'admin') - Access role
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
@@ -22,8 +22,8 @@ service cloud.firestore {
     // Collection: services
     // Document ID: {serviceId} (Normalized slug, e.g., 'registrar')
     // Fields:
-    //   - name: string (required, 1-100 chars) - Department service name
-    //   - description: string (required, 0-1000 chars) - Detailed description
+    //   - name: string (required, 1-500 chars) - Department service name (expanded for encrypted ciphertext)
+    //   - description: string (required, 0-4000 chars) - Detailed description (expanded for encrypted ciphertext)
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
@@ -32,10 +32,10 @@ service cloud.firestore {
     // Document ID: {transactionId} (Normalized slug, e.g., 'getting_prospectus')
     // Fields:
     //   - serviceId: string (required, 1-100 chars) - Parent service identifier
-    //   - name: string (required, 1-100 chars) - Transaction title
-    //   - description: string (optional, 0-2000 chars) - Procedure summary
-    //   - officeName: string (optional, 0-200 chars) - Responsible school office
-    //   - officeSchedule: string (optional, 0-200 chars) - Operating hours / schedule
+    //   - name: string (required, 1-500 chars) - Transaction title (expanded for encrypted ciphertext)
+    //   - description: string (optional, 0-4000 chars) - Procedure summary (expanded for encrypted ciphertext)
+    //   - officeName: string (optional, 0-1000 chars) - Responsible school office (expanded for encrypted ciphertext)
+    //   - officeSchedule: string (optional, 0-1000 chars) - Operating hours / schedule (expanded for encrypted ciphertext)
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
@@ -44,7 +44,7 @@ service cloud.firestore {
     // Document ID: {requirementId} (Hierarchical slug, e.g., 'getting_prospectus_valid_id')
     // Fields:
     //   - transactionId: string (required, 1-100 chars) - Parent transaction identifier
-    //   - requirementText: string (required, 1-1000 chars) - Requirement instructions
+    //   - requirementText: string (required, 1-4000 chars) - Requirement instructions (expanded for encrypted ciphertext)
     //   - displayOrder: number (required, >= 1) - Presentation order index
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
@@ -55,11 +55,11 @@ service cloud.firestore {
     // Fields:
     //   - transactionId: string (required, 1-100 chars) - Parent transaction identifier
     //   - stepNumber: number (required, >= 1) - Sequential step number
-    //   - instruction: string (required, 1-2000 chars) - Step walkthrough text
+    //   - instruction: string (required, 1-6000 chars) - Step walkthrough text (expanded for encrypted ciphertext)
     //   - remoteImageUrl: string (optional, 0-1000 chars) - Public image URL
     //   - localImagePath: string (optional, 0-500 chars) - Local asset path
-    //   - imageCaption: string (optional, 0-500 chars) - Image caption
-    //   - websiteName: string (optional, 0-200 chars) - External reference title
+    //   - imageCaption: string (optional, 0-1500 chars) - Image caption (expanded for encrypted ciphertext)
+    //   - websiteName: string (optional, 0-1000 chars) - External reference title (expanded for encrypted ciphertext)
     //   - websiteUrl: string (optional, 0-1000 chars) - External link URL
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
@@ -70,7 +70,7 @@ service cloud.firestore {
     // Fields:
     //   - transactionId: string (optional if serviceId present, 1-100 chars)
     //   - serviceId: string (optional if transactionId present, 1-100 chars)
-    //   - guidelineText: string (required, 1-1000 chars) - Guideline description
+    //   - guidelineText: string (required, 1-4000 chars) - Guideline description (expanded for encrypted ciphertext)
     //   - displayOrder: number (required, >= 1) - Presentation order index
     //   - isActive: bool (required) - Active visibility state
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
@@ -79,8 +79,8 @@ service cloud.firestore {
     // Collection: announcements
     // Document ID: {announcementId} (Auto-generated Firestore ID)
     // Fields:
-    //   - title: string (required, 1-200 chars) - Announcement headline
-    //   - message: string (required, 1-5000 chars) - Announcement body
+    //   - title: string (required, 1-1000 chars) - Announcement headline (expanded for encrypted ciphertext)
+    //   - message: string (required, 1-10000 chars) - Announcement body (expanded for encrypted ciphertext)
     //   - displayOrder: number (required) - Presentation sorting priority
     //   - isActive: bool (required) - Active broadcast status
     //   - datePosted: timestamp | number | string (optional, max 50 chars if string, immutable) - Post timestamp
@@ -93,8 +93,8 @@ service cloud.firestore {
     //   - type: string (required, 1-50 chars) - Entity type (service, transaction, etc.)
     //   - action: string (required, 1-50 chars) - Action taken (added, updated, deleted, etc.)
     //   - title: string (required, 1-200 chars) - Name of altered record
-    //   - description: string (optional, 0-2000 chars) - Action summary
-    //   - details: string (optional, 0-2000 chars) - Detailed description
+    //   - description: string (optional, 0-6000 chars) - Action summary (expanded for encrypted ciphertext)
+    //   - details: string (optional, 0-6000 chars) - Detailed description (expanded for encrypted ciphertext)
     //   - parentName: string (optional, 0-200 chars) - Parent entity name
     //   - parentId: string (optional, 0-100 chars) - Parent entity ID
     //   - recordId: string (optional, 0-100 chars) - Altered record ID
@@ -123,8 +123,8 @@ service cloud.firestore {
     //   - loggedStudentNumbers: list<string> (optional, 1-10 items, each 1-50 chars, index 0 == currentStudentNumber when present) - Ordered list of student numbers logged in on device (most recent open first)
     //   - dailyStudentNumbers: list<string> (optional, 1-3 items, each 1-50 chars) - Distinct student numbers used on device on switchDate
     //   - studentNumbers: list<string> (optional, 0-100 items, each 1-50 chars) - Unique student numbers opened on device
-    //   - deviceName: string (required, 1-150 chars) - Device model/manufacturer display name
-    //   - osVersion: string (optional, 0-100 chars) - Android OS version string
+    //   - deviceName: string (required, 1-500 chars) - Device model/manufacturer display name (expanded for encrypted ciphertext)
+    //   - osVersion: string (optional, 0-500 chars) - Android OS version string (expanded for encrypted ciphertext)
     //   - installationId: string (required, 8-100 chars, matches ^[a-zA-Z0-9_\-]+$, immutable) - Unique app installation ID
     //   - openCount: number (required, 1-10000000, monotonic non-decreasing) - Cumulative app launch count
     //   - dailySwitchCount: number (required, 0-3) - Account switches performed on switchDate (max 3/day/device)
@@ -149,11 +149,21 @@ service cloud.firestore {
     //   - pinSalt: string (required, 32 hex chars ^[0-9a-fA-F]{32}$) - 16-byte random hex salt
     //   - status: string (required, 'active' | 'blocked') - Account status
     //   - deviceId: string (optional, 1-100 chars) - Last active device installation ID
-    //   - deviceName: string (optional, 1-150 chars) - Last active device display name
-    //   - osVersion: string (optional, 0-100 chars) - Last active Android OS version
+    //   - deviceName: string (optional, 1-500 chars) - Last active device display name (expanded for encrypted ciphertext)
+    //   - osVersion: string (optional, 0-500 chars) - Last active Android OS version (expanded for encrypted ciphertext)
     //   - registeredAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Initial registration timestamp
     //   - lastLoginAt: timestamp | number | string (optional, max 50 chars if string) - Most recent login timestamp
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Last modification timestamp
+    //
+    // Collection: vault_config
+    // Document ID: {configId} (matches ^[a-zA-Z0-9_\-]+$, e.g., 'primary')
+    // Fields:
+    //   - isConfigured: bool (required) - True if database master key is initialized
+    //   - saltHex: string (required, 32 hex chars ^[0-9a-fA-F]{32}$) - Random PBKDF2 salt
+    //   - canaryCiphertext: string (required, 10-500 chars) - Verification ciphertext for Password 2
+    //   - recoveryCanary: string (optional, 0-500 chars) - Verification ciphertext for Recovery Key
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable)
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string)
     //
     // ===============================================================
 
@@ -280,10 +290,10 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['name', 'position', 'department', 'phone', 'photoUrl', 'email', 'role', 'updatedAt', 'createdAt']) &&
         hasRequiredFields(['name', 'position', 'department', 'email', 'role', 'updatedAt']) &&
         data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
-        data.position is string && data.position.size() >= 2 && data.position.size() <= 100 &&
-        data.department is string && data.department.size() >= 2 && data.department.size() <= 100 &&
+        data.position is string && data.position.size() >= 2 && data.position.size() <= 500 &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 500 &&
         data.email is string && isValidEmail(data.email) &&
-        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 500)) &&
         (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 200000)) &&
         data.role == 'admin' &&
         isValidTimestampField(data.updatedAt) &&
@@ -294,8 +304,8 @@ service cloud.firestore {
     function isValidService(data) {
       return hasOnlyAllowedFields(['name', 'description', 'isActive', 'createdAt', 'updatedAt']) &&
         hasRequiredFields(['name', 'description', 'isActive', 'updatedAt']) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
-        data.description is string && data.description.size() <= 1000 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 500 &&
+        data.description is string && data.description.size() <= 4000 &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
         (!('createdAt' in data) || isValidTimestampField(data.createdAt));
@@ -309,10 +319,10 @@ service cloud.firestore {
         ]) &&
         hasRequiredFields(['serviceId', 'name', 'isActive', 'updatedAt']) &&
         data.serviceId is string && data.serviceId.size() >= 1 && data.serviceId.size() <= 100 &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
-        (!('officeName' in data) || (data.officeName is string && data.officeName.size() <= 200)) &&
-        (!('officeSchedule' in data) || (data.officeSchedule is string && data.officeSchedule.size() <= 200)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 500 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 4000)) &&
+        (!('officeName' in data) || (data.officeName is string && data.officeName.size() <= 1000)) &&
+        (!('officeSchedule' in data) || (data.officeSchedule is string && data.officeSchedule.size() <= 1000)) &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
         (!('createdAt' in data) || isValidTimestampField(data.createdAt));
@@ -326,7 +336,7 @@ service cloud.firestore {
         ]) &&
         hasRequiredFields(['transactionId', 'requirementText', 'displayOrder', 'isActive', 'updatedAt']) &&
         data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 100 &&
-        data.requirementText is string && data.requirementText.size() >= 1 && data.requirementText.size() <= 1000 &&
+        data.requirementText is string && data.requirementText.size() >= 1 && data.requirementText.size() <= 4000 &&
         data.displayOrder is number && data.displayOrder >= 1 &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
@@ -344,11 +354,11 @@ service cloud.firestore {
         hasRequiredFields(['transactionId', 'stepNumber', 'instruction', 'isActive', 'updatedAt']) &&
         data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 100 &&
         data.stepNumber is number && data.stepNumber >= 1 &&
-        data.instruction is string && data.instruction.size() >= 1 && data.instruction.size() <= 2000 &&
+        data.instruction is string && data.instruction.size() >= 1 && data.instruction.size() <= 6000 &&
         (!('remoteImageUrl' in data) || (data.remoteImageUrl is string && data.remoteImageUrl.size() <= 1000)) &&
         (!('localImagePath' in data) || (data.localImagePath is string && data.localImagePath.size() <= 500)) &&
-        (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
-        (!('websiteName' in data) || (data.websiteName is string && data.websiteName.size() <= 200)) &&
+        (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 1500)) &&
+        (!('websiteName' in data) || (data.websiteName is string && data.websiteName.size() <= 1000)) &&
         (!('websiteUrl' in data) || (data.websiteUrl is string && data.websiteUrl.size() <= 1000)) &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
@@ -366,7 +376,7 @@ service cloud.firestore {
           ('transactionId' in data && data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 100) ||
           ('serviceId' in data && data.serviceId is string && data.serviceId.size() >= 1 && data.serviceId.size() <= 100)
         ) &&
-        data.guidelineText is string && data.guidelineText.size() >= 1 && data.guidelineText.size() <= 1000 &&
+        data.guidelineText is string && data.guidelineText.size() >= 1 && data.guidelineText.size() <= 4000 &&
         data.displayOrder is number && data.displayOrder >= 1 &&
         data.isActive is bool &&
         isValidTimestampField(data.updatedAt) &&
@@ -380,8 +390,8 @@ service cloud.firestore {
           'isActive', 'datePosted', 'createdAt', 'updatedAt'
         ]) &&
         hasRequiredFields(['title', 'message', 'displayOrder', 'isActive', 'updatedAt']) &&
-        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
-        data.message is string && data.message.size() >= 1 && data.message.size() <= 5000 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 1000 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 10000 &&
         data.displayOrder is number &&
         data.isActive is bool &&
         (!('datePosted' in data) || isValidTimestampField(data.datePosted)) &&
@@ -400,8 +410,8 @@ service cloud.firestore {
         data.type is string && data.type.size() >= 1 && data.type.size() <= 50 &&
         data.action is string && data.action.size() >= 1 && data.action.size() <= 50 &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
-        (!('details' in data) || (data.details is string && data.details.size() <= 2000)) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 6000)) &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 6000)) &&
         (!('parentName' in data) || (data.parentName is string && data.parentName.size() <= 200)) &&
         (!('parentId' in data) || (data.parentId is string && data.parentId.size() <= 100)) &&
         (!('recordId' in data) || (data.recordId is string && data.recordId.size() <= 100)) &&
@@ -463,8 +473,8 @@ service cloud.firestore {
             )
           )
         ) &&
-        data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 150 &&
-        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 100)) &&
+        data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 500 &&
+        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 500)) &&
         data.installationId is string && data.installationId.size() >= 8 && data.installationId.size() <= 100 &&
         data.installationId.matches('^[a-zA-Z0-9_\\-]+$') &&
         data.openCount is number && data.openCount >= 1 && data.openCount <= 10000000 &&
@@ -515,11 +525,23 @@ service cloud.firestore {
         data.status is string &&
         data.status in ['active', 'blocked'] &&
         (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() >= 1 && data.deviceId.size() <= 100)) &&
-        (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 150)) &&
-        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 100)) &&
+        (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 500)) &&
+        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 500)) &&
         isValidTimestampField(data.updatedAt) &&
         (!('registeredAt' in data) || isValidTimestampField(data.registeredAt)) &&
         (!('lastLoginAt' in data) || isValidTimestampField(data.lastLoginAt));
+    }
+
+    // Validate vault config document schema & values
+    function isValidVaultConfig(data) {
+      return hasOnlyAllowedFields(['isConfigured', 'saltHex', 'canaryCiphertext', 'recoveryCanary', 'createdAt', 'updatedAt']) &&
+        hasRequiredFields(['isConfigured', 'saltHex', 'canaryCiphertext', 'updatedAt']) &&
+        data.isConfigured is bool &&
+        data.saltHex is string && data.saltHex.size() == 32 && data.saltHex.matches('^[0-9a-fA-F]{32}$') &&
+        data.canaryCiphertext is string && data.canaryCiphertext.size() >= 10 && data.canaryCiphertext.size() <= 500 &&
+        (!('recoveryCanary' in data) || (data.recoveryCanary is string && data.recoveryCanary.size() <= 500)) &&
+        isValidTimestampField(data.updatedAt) &&
+        (!('createdAt' in data) || isValidTimestampField(data.createdAt));
     }
 
     // ===============================================================
@@ -684,7 +706,10 @@ service cloud.firestore {
       allow list: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
 
       allow create: if isValidStudent(studentId, request.resource.data) &&
-        (request.resource.data.status == 'active' || isAdmin());
+        (request.resource.data.status == 'active' || isAdmin()) &&
+        (!('deviceId' in request.resource.data) ||
+          !exists(/databases/$(database)/documents/student_activity_logs/$(request.resource.data.deviceId)) ||
+          get(/databases/$(database)/documents/student_activity_logs/$(request.resource.data.deviceId)).data.dailySwitchCount < 3);
 
       allow update: if isValidStudent(studentId, request.resource.data) &&
         (
@@ -700,6 +725,18 @@ service cloud.firestore {
         );
 
       allow delete: if isAdmin();
+    }
+
+    // 12. VAULT CONFIG COLLECTION
+    // Read: Authorized administrators only
+    // Create: Authorized administrators only with strict schema validation
+    // Update: Authorized administrators only, createdAt immutable, with strict schema validation
+    // Delete: Strictly forbidden
+    match /vault_config/{configId} {
+      allow read: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
+      allow create: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail()) && isValidVaultConfig(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail()) && areImmutableFieldsUnchanged(['createdAt']) && isValidVaultConfig(request.resource.data);
+      allow delete: if false;
     }
 
     // ===============================================================

@@ -16,6 +16,10 @@ import {
   buildGuidelineId,
   createDocumentIfAbsent
 } from "../../../utils/idUtils";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../../utils/vaultCrypto.js";
 
 const GUIDELINES_COLLECTION = "department_guidelines";
 const TRANSACTIONS_COLLECTION = "transactions";
@@ -30,10 +34,16 @@ export async function getAllGuidelines() {
     collection(db, GUIDELINES_COLLECTION)
   );
 
-  const guidelines = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const guidelines = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        guidelineText: await decryptCatalogField(data.guidelineText)
+      };
+    })
+  );
 
   guidelines.sort((a, b) => {
     const transactionCompare =
@@ -68,10 +78,16 @@ export async function getGuidelinesByTransactionId(transactionId) {
 
   const snapshot = await getDocs(q);
 
-  const guidelines = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const guidelines = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        guidelineText: await decryptCatalogField(data.guidelineText)
+      };
+    })
+  );
 
   guidelines.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 
@@ -108,7 +124,8 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    const name = docSnap.data()?.name || "";
+    const rawName = docSnap.data()?.name || "";
+    const name = await decryptCatalogField(rawName);
     if (name) {
       transactionNameCache.set(transactionId, name);
     }
@@ -162,13 +179,15 @@ export async function addGuideline(
     cleanGuidelineText
   );
 
+  const encryptedGuidelineText = await encryptCatalogField(cleanGuidelineText);
+
   await createDocumentIfAbsent(
     db,
     GUIDELINES_COLLECTION,
     guidelineId,
     {
       transactionId: cleanTransactionId,
-      guidelineText: cleanGuidelineText,
+      guidelineText: encryptedGuidelineText,
       displayOrder: cleanDisplayOrder,
       isActive: true,
       createdAt: serverTimestamp(),
@@ -247,9 +266,11 @@ export async function updateGuideline(
     guidelineId
   );
 
+  const encryptedGuidelineText = await encryptCatalogField(cleanGuidelineText);
+
   await updateDoc(guidelineRef, {
     transactionId: cleanTransactionId,
-    guidelineText: cleanGuidelineText,
+    guidelineText: encryptedGuidelineText,
     displayOrder: cleanDisplayOrder,
     updatedAt: serverTimestamp()
   });
@@ -302,8 +323,9 @@ export async function setGuidelineActiveStatus(
       const guidelineData = guidelineSnap.exists()
         ? guidelineSnap.data()
         : null;
-      const guidelineName =
+      const rawText =
         guidelineData?.guidelineText || "Guideline";
+      const guidelineName = await decryptCatalogField(rawText);
       const transactionId =
         guidelineData?.transactionId || "";
       const transactionName =
@@ -358,8 +380,9 @@ export async function deleteGuideline(guidelineId) {
       const guidelineData = guidelineSnap.exists()
         ? guidelineSnap.data()
         : null;
-      const guidelineName =
+      const rawText =
         guidelineData?.guidelineText || "Guideline";
+      const guidelineName = await decryptCatalogField(rawText);
       const transactionId =
         guidelineData?.transactionId || "";
       const transactionName =

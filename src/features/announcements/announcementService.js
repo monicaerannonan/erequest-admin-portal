@@ -11,6 +11,10 @@ import {
 
 import { db } from "../../firebase/firebaseConfig";
 import { addActivityLog } from "../dashboard/activityLogService";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../utils/vaultCrypto.js";
 
 const ANNOUNCEMENTS_COLLECTION = "announcements";
 
@@ -24,10 +28,17 @@ export const getAllAnnouncements = async () => {
     collection(db, ANNOUNCEMENTS_COLLECTION)
   );
 
-  return snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  return await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        title: await decryptCatalogField(data.title),
+        message: await decryptCatalogField(data.message)
+      };
+    })
+  );
 };
 
 
@@ -52,9 +63,12 @@ export const getAnnouncementById = async (announcementId) => {
     return null;
   }
 
+  const data = snapshot.data();
   return {
     id: snapshot.id,
-    ...snapshot.data()
+    ...data,
+    title: await decryptCatalogField(data.title),
+    message: await decryptCatalogField(data.message)
   };
 };
 
@@ -90,11 +104,14 @@ export const addAnnouncement = async (
     );
   }
 
+  const encryptedTitle = await encryptCatalogField(cleanTitle);
+  const encryptedMessage = await encryptCatalogField(cleanMessage);
+
   const documentReference = await addDoc(
     collection(db, ANNOUNCEMENTS_COLLECTION),
     {
-      title: cleanTitle,
-      message: cleanMessage,
+      title: encryptedTitle,
+      message: encryptedMessage,
       displayOrder: order,
       isActive: true,
       datePosted: serverTimestamp(),
@@ -161,9 +178,12 @@ export const updateAnnouncement = async (
     announcementId
   );
 
+  const encryptedTitle = await encryptCatalogField(cleanTitle);
+  const encryptedMessage = await encryptCatalogField(cleanMessage);
+
   await updateDoc(announcementRef, {
-    title: cleanTitle,
-    message: cleanMessage,
+    title: encryptedTitle,
+    message: encryptedMessage,
     displayOrder: order,
     updatedAt: serverTimestamp()
   });
@@ -205,9 +225,10 @@ export const setAnnouncementActiveStatus = async (
   const logPromise = (async () => {
     try {
       const announcementSnap = await getDoc(announcementRef);
-      const announcementTitle =
+      const rawTitle =
         (announcementSnap.exists() && announcementSnap.data()?.title) ||
         "Announcement";
+      const announcementTitle = await decryptCatalogField(rawTitle);
 
       await addActivityLog({
         type: "announcement",
@@ -255,9 +276,10 @@ export const deleteAnnouncement = async (
   const logPromise = (async () => {
     try {
       const announcementSnap = await getDoc(announcementRef);
-      const announcementTitle =
+      const rawTitle =
         (announcementSnap.exists() && announcementSnap.data()?.title) ||
         "Announcement";
+      const announcementTitle = await decryptCatalogField(rawTitle);
 
       await addActivityLog({
         type: "announcement",

@@ -45,6 +45,9 @@ import AdminProfilePage
 import StudentActivityLogsPage
   from "./features/studentLogs/StudentActivityLogsPage";
 
+import VaultProvider from "./features/vault/VaultProvider";
+import VaultModal from "./features/vault/VaultModal";
+
 function RouteLoadingFallback() {
   return (
     <div className="admin-splash-screen" style={{ minHeight: "60vh", background: "transparent" }}>
@@ -68,7 +71,11 @@ function App() {
 
     <HashRouter>
 
-      <Suspense fallback={<RouteLoadingFallback />}>
+      <VaultProvider>
+
+        <VaultModal />
+
+        <Suspense fallback={<RouteLoadingFallback />}>
 
       <Routes>
 
@@ -247,6 +254,8 @@ function App() {
       </Routes>
 
       </Suspense>
+
+      </VaultProvider>
 
     </HashRouter>
 

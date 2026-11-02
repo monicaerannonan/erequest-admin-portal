@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test tests/idGeneration.test.js tests/firebaseEmulatorConfig.test.js tests/passwordReset.test.js tests/adminProfile.test.js",
+    "test": "node --test tests/idGeneration.test.js tests/firebaseEmulatorConfig.test.js tests/passwordReset.test.js tests/adminProfile.test.js tests/vaultCrypto.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

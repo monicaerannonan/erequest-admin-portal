@@ -17,6 +17,10 @@ import {
   createDocumentIfAbsent
 } from "../../../utils/idUtils";
 import { withTimeout } from "../../../utils/asyncUtils";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../../utils/vaultCrypto.js";
 
 const TRANSACTIONS_COLLECTION = "transactions";
 const SERVICES_COLLECTION = "services";
@@ -33,10 +37,19 @@ export async function getAllTransactions() {
     "Fetching transactions"
   );
 
-  const transactions = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const transactions = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        name: await decryptCatalogField(data.name),
+        description: await decryptCatalogField(data.description),
+        officeName: await decryptCatalogField(data.officeName),
+        officeSchedule: await decryptCatalogField(data.officeSchedule)
+      };
+    })
+  );
 
   transactions.sort((a, b) =>
     String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
@@ -71,9 +84,14 @@ export async function getTransactionById(transactionId) {
     return null;
   }
 
+  const data = docSnap.data();
   return {
     id: docSnap.id,
-    ...docSnap.data()
+    ...data,
+    name: await decryptCatalogField(data.name),
+    description: await decryptCatalogField(data.description),
+    officeName: await decryptCatalogField(data.officeName),
+    officeSchedule: await decryptCatalogField(data.officeSchedule)
   };
 }
 
@@ -89,18 +107,25 @@ export async function getActiveServices() {
     "Fetching active services"
   );
 
-  const services = snapshot.docs
-    .map((document) => ({
-      id: document.id,
-      ...document.data()
-    }))
-    .filter((service) => service.isActive === true);
+  const services = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        name: await decryptCatalogField(data.name),
+        description: await decryptCatalogField(data.description)
+      };
+    })
+  );
 
-  services.sort((a, b) =>
+  const activeServices = services.filter((service) => service.isActive === true);
+
+  activeServices.sort((a, b) =>
     String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
   );
 
-  return services;
+  return activeServices;
 }
 
 
@@ -133,7 +158,8 @@ async function getServiceName(serviceId) {
       return "";
     }
 
-    const name = docSnap.data()?.name || "";
+    const rawName = docSnap.data()?.name || "";
+    const name = await decryptCatalogField(rawName);
     serviceNameCache.set(serviceId, name);
     return name;
   } catch (error) {
@@ -173,16 +199,21 @@ export async function addTransaction(
 
   const transactionId = buildTransactionId(cleanName);
 
+  const encryptedName = await encryptCatalogField(cleanName);
+  const encryptedDescription = await encryptCatalogField(cleanDescription);
+  const encryptedOfficeName = await encryptCatalogField(cleanOfficeName);
+  const encryptedOfficeSchedule = await encryptCatalogField(cleanOfficeSchedule);
+
   await createDocumentIfAbsent(
     db,
     TRANSACTIONS_COLLECTION,
     transactionId,
     {
       serviceId: cleanServiceId,
-      name: cleanName,
-      description: cleanDescription,
-      officeName: cleanOfficeName,
-      officeSchedule: cleanOfficeSchedule,
+      name: encryptedName,
+      description: encryptedDescription,
+      officeName: encryptedOfficeName,
+      officeSchedule: encryptedOfficeSchedule,
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -245,12 +276,17 @@ export async function updateTransaction(
     transactionId
   );
 
+  const encryptedName = await encryptCatalogField(cleanName);
+  const encryptedDescription = await encryptCatalogField(description.trim());
+  const encryptedOfficeName = await encryptCatalogField(officeName.trim());
+  const encryptedOfficeSchedule = await encryptCatalogField(officeSchedule.trim());
+
   await updateDoc(transactionRef, {
     serviceId: cleanServiceId,
-    name: cleanName,
-    description: description.trim(),
-    officeName: officeName.trim(),
-    officeSchedule: officeSchedule.trim(),
+    name: encryptedName,
+    description: encryptedDescription,
+    officeName: encryptedOfficeName,
+    officeSchedule: encryptedOfficeSchedule,
     updatedAt: serverTimestamp()
   });
 
@@ -299,8 +335,9 @@ export async function setTransactionActiveStatus(
       ? transactionSnap.data()
       : null;
 
-  const transactionName =
+  const rawName =
     transactionData?.name || "Transaction";
+  const transactionName = await decryptCatalogField(rawName);
 
   const serviceId =
     transactionData?.serviceId || "";
@@ -445,8 +482,9 @@ export async function deleteTransaction(
       ? transactionSnap.data()
       : null;
 
-  const transactionName =
+  const rawName =
     transactionData?.name || "Transaction";
+  const transactionName = await decryptCatalogField(rawName);
 
   const serviceId =
     transactionData?.serviceId || "";

@@ -16,6 +16,10 @@ import {
   buildRequirementId,
   createDocumentIfAbsent
 } from "../../../utils/idUtils";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../../utils/vaultCrypto.js";
 
 const REQUIREMENTS_COLLECTION = "requirements";
 const TRANSACTIONS_COLLECTION = "transactions";
@@ -30,10 +34,16 @@ export async function getAllRequirements() {
     collection(db, REQUIREMENTS_COLLECTION)
   );
 
-  const requirements = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const requirements = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        requirementText: await decryptCatalogField(data.requirementText)
+      };
+    })
+  );
 
   requirements.sort((a, b) => {
     const transactionCompare =
@@ -68,10 +78,16 @@ export async function getRequirementsByTransactionId(transactionId) {
 
   const snapshot = await getDocs(q);
 
-  const requirements = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const requirements = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        requirementText: await decryptCatalogField(data.requirementText)
+      };
+    })
+  );
 
   requirements.sort(
     (a, b) => (a.displayOrder || 0) - (b.displayOrder || 0)
@@ -90,21 +106,26 @@ export async function getActiveTransactions() {
     collection(db, TRANSACTIONS_COLLECTION)
   );
 
-  const transactions = snapshot.docs
-    .map((document) => ({
-      id: document.id,
-      ...document.data()
-    }))
-    .filter(
-      (transaction) =>
-        transaction.isActive === true
-    );
+  const transactions = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        name: await decryptCatalogField(data.name)
+      };
+    })
+  );
 
-  transactions.sort((a, b) =>
+  const activeTransactions = transactions.filter(
+    (transaction) => transaction.isActive === true
+  );
+
+  activeTransactions.sort((a, b) =>
     (a.name || "").localeCompare(b.name || "")
   );
 
-  return transactions;
+  return activeTransactions;
 }
 
 
@@ -137,7 +158,8 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    const name = docSnap.data()?.name || "";
+    const rawName = docSnap.data()?.name || "";
+    const name = await decryptCatalogField(rawName);
     if (name) {
       transactionNameCache.set(transactionId, name);
     }
@@ -191,13 +213,15 @@ export async function addRequirement(
     cleanRequirementText
   );
 
+  const encryptedRequirementText = await encryptCatalogField(cleanRequirementText);
+
   await createDocumentIfAbsent(
     db,
     REQUIREMENTS_COLLECTION,
     requirementId,
     {
       transactionId: cleanTransactionId,
-      requirementText: cleanRequirementText,
+      requirementText: encryptedRequirementText,
       displayOrder: cleanDisplayOrder,
       isActive: true,
       createdAt: serverTimestamp(),
@@ -276,9 +300,11 @@ export async function updateRequirement(
     requirementId
   );
 
+  const encryptedRequirementText = await encryptCatalogField(cleanRequirementText);
+
   await updateDoc(requirementRef, {
     transactionId: cleanTransactionId,
-    requirementText: cleanRequirementText,
+    requirementText: encryptedRequirementText,
     displayOrder: cleanDisplayOrder,
     updatedAt: serverTimestamp()
   });
@@ -331,8 +357,9 @@ export async function setRequirementActiveStatus(
       const requirementData = requirementSnap.exists()
         ? requirementSnap.data()
         : null;
-      const requirementName =
+      const rawText =
         requirementData?.requirementText || "Requirement";
+      const requirementName = await decryptCatalogField(rawText);
       const transactionId =
         requirementData?.transactionId || "";
       const transactionName =
@@ -389,8 +416,9 @@ export async function deleteRequirement(
       const requirementData = requirementSnap.exists()
         ? requirementSnap.data()
         : null;
-      const requirementName =
+      const rawText =
         requirementData?.requirementText || "Requirement";
+      const requirementName = await decryptCatalogField(rawText);
       const transactionId =
         requirementData?.transactionId || "";
       const transactionName =

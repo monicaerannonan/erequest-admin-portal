@@ -16,6 +16,10 @@ import {
   buildProcedureStepId,
   createDocumentIfAbsent
 } from "../../../utils/idUtils";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../../utils/vaultCrypto.js";
 
 const PROCEDURES_COLLECTION = "procedure_steps";
 const TRANSACTIONS_COLLECTION = "transactions";
@@ -30,10 +34,18 @@ export async function getAllProcedureSteps() {
     collection(db, PROCEDURES_COLLECTION)
   );
 
-  const procedures = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const procedures = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        instruction: await decryptCatalogField(data.instruction),
+        imageCaption: await decryptCatalogField(data.imageCaption),
+        websiteName: await decryptCatalogField(data.websiteName)
+      };
+    })
+  );
 
   procedures.sort((a, b) => {
     const transactionCompare =
@@ -68,10 +80,18 @@ export async function getProcedureStepsByTransactionId(transactionId) {
 
   const snapshot = await getDocs(q);
 
-  const procedures = snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data()
-  }));
+  const procedures = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        instruction: await decryptCatalogField(data.instruction),
+        imageCaption: await decryptCatalogField(data.imageCaption),
+        websiteName: await decryptCatalogField(data.websiteName)
+      };
+    })
+  );
 
   procedures.sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0));
 
@@ -108,7 +128,8 @@ async function getTransactionName(transactionId) {
       return "";
     }
 
-    const name = docSnap.data()?.name || "";
+    const rawName = docSnap.data()?.name || "";
+    const name = await decryptCatalogField(rawName);
     if (name) {
       transactionNameCache.set(transactionId, name);
     }
@@ -184,6 +205,10 @@ export async function addProcedureStep(
     cleanStepNumber
   );
 
+  const encryptedInstruction = await encryptCatalogField(cleanInstruction);
+  const encryptedImageCaption = await encryptCatalogField(cleanImageCaption);
+  const encryptedWebsiteName = await encryptCatalogField(cleanWebsiteName);
+
   await createDocumentIfAbsent(
     db,
     PROCEDURES_COLLECTION,
@@ -191,11 +216,11 @@ export async function addProcedureStep(
     {
       transactionId: cleanTransactionId,
       stepNumber: cleanStepNumber,
-      instruction: cleanInstruction,
+      instruction: encryptedInstruction,
       remoteImageUrl: cleanRemoteImageUrl,
       localImagePath: cleanLocalImagePath,
-      imageCaption: cleanImageCaption,
-      websiteName: cleanWebsiteName,
+      imageCaption: encryptedImageCaption,
+      websiteName: encryptedWebsiteName,
       websiteUrl: cleanWebsiteUrl,
       isActive: true,
       createdAt: serverTimestamp(),
@@ -296,14 +321,18 @@ export async function updateProcedureStep(
     procedureId
   );
 
+  const encryptedInstruction = await encryptCatalogField(cleanInstruction);
+  const encryptedImageCaption = await encryptCatalogField(cleanImageCaption);
+  const encryptedWebsiteName = await encryptCatalogField(cleanWebsiteName);
+
   await updateDoc(procedureRef, {
     transactionId: cleanTransactionId,
     stepNumber: cleanStepNumber,
-    instruction: cleanInstruction,
+    instruction: encryptedInstruction,
     remoteImageUrl: cleanRemoteImageUrl,
     localImagePath: cleanLocalImagePath,
-    imageCaption: cleanImageCaption,
-    websiteName: cleanWebsiteName,
+    imageCaption: encryptedImageCaption,
+    websiteName: encryptedWebsiteName,
     websiteUrl: cleanWebsiteUrl,
     updatedAt: serverTimestamp()
   });
@@ -356,8 +385,9 @@ export async function setProcedureStepActiveStatus(
       const procedureData = procedureSnap.exists()
         ? procedureSnap.data()
         : null;
-      const instruction =
+      const rawInstruction =
         procedureData?.instruction || "Procedure Step";
+      const instruction = await decryptCatalogField(rawInstruction);
       const stepNumber =
         procedureData?.stepNumber || "";
       const transactionId =
@@ -418,8 +448,9 @@ export async function deleteProcedureStep(
       const procedureData = procedureSnap.exists()
         ? procedureSnap.data()
         : null;
-      const instruction =
+      const rawInstruction =
         procedureData?.instruction || "Procedure Step";
+      const instruction = await decryptCatalogField(rawInstruction);
       const stepNumber =
         procedureData?.stepNumber || "";
       const transactionId =

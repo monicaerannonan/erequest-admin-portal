@@ -23,6 +23,10 @@ import {
   createDocumentIfAbsent
 } from "../../utils/idUtils";
 import { withTimeout } from "../../utils/asyncUtils";
+import {
+  encryptCatalogField,
+  decryptCatalogField
+} from "../../utils/vaultCrypto.js";
 
 
 const SERVICES_COLLECTION =
@@ -49,17 +53,17 @@ export async function getAllServices() {
     );
 
 
-  const services =
-    snapshot.docs.map(
-      (document) => ({
-
-        id:
-          document.id,
-
-        ...document.data()
-
-      })
-    );
+  const services = await Promise.all(
+    snapshot.docs.map(async (document) => {
+      const data = document.data();
+      return {
+        id: document.id,
+        ...data,
+        name: await decryptCatalogField(data.name),
+        description: await decryptCatalogField(data.description)
+      };
+    })
+  );
 
 
   services.sort(
@@ -96,9 +100,12 @@ export async function getServiceById(serviceId) {
     return null;
   }
 
+  const data = snapshot.data();
   return {
     id: snapshot.id,
-    ...snapshot.data()
+    ...data,
+    name: await decryptCatalogField(data.name),
+    description: await decryptCatalogField(data.description)
   };
 }
 
@@ -131,6 +138,8 @@ export async function addService(
   const serviceId =
     buildServiceId(cleanName);
 
+  const encryptedName = await encryptCatalogField(cleanName);
+  const encryptedDescription = await encryptCatalogField(cleanDescription);
 
   await createDocumentIfAbsent(
     db,
@@ -139,10 +148,10 @@ export async function addService(
     {
 
       name:
-        cleanName,
+        encryptedName,
 
       description:
-        cleanDescription,
+        encryptedDescription,
 
       isActive:
         true,
@@ -218,16 +227,18 @@ export async function updateService(
       serviceId
     );
 
+  const encryptedName = await encryptCatalogField(cleanName);
+  const encryptedDescription = await encryptCatalogField(cleanDescription);
 
   await updateDoc(
     serviceRef,
     {
 
       name:
-        cleanName,
+        encryptedName,
 
       description:
-        cleanDescription,
+        encryptedDescription,
 
       updatedAt:
         serverTimestamp()
@@ -281,9 +292,8 @@ export async function setServiceActiveStatus(
   const logPromise = (async () => {
     try {
       const serviceSnap = await getDoc(serviceRef);
-      const serviceName =
-        (serviceSnap.exists() && serviceSnap.data()?.name) ||
-        "Service";
+      const rawName = (serviceSnap.exists() && serviceSnap.data()?.name) || "Service";
+      const serviceName = await decryptCatalogField(rawName);
 
       await addActivityLog({
         type: "service",
@@ -401,9 +411,8 @@ export async function deleteService(
   const logPromise = (async () => {
     try {
       const serviceSnap = await getDoc(serviceRef);
-      const serviceName =
-        (serviceSnap.exists() && serviceSnap.data()?.name) ||
-        "Service";
+      const rawName = (serviceSnap.exists() && serviceSnap.data()?.name) || "Service";
+      const serviceName = await decryptCatalogField(rawName);
 
       await addActivityLog({
         type: "service",

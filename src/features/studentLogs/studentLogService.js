@@ -48,11 +48,14 @@ export function getManilaDateKey(dateInput = new Date()) {
    ========================================================= */
 
 export function normalizeStudentNumberKey(value) {
-  const clean = String(value ?? "").trim();
+  const clean = String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
   if (!clean || clean === "—") {
     return "";
   }
-  return clean.toUpperCase();
+  return clean;
 }
 
 /* =========================================================
