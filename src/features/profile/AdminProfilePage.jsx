@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  getInitials
+  getInitials,
+  uploadAdminProfilePhoto
 } from "./profileService";
 import { useAdminProfileSync } from "./AdminProfileContext";
 import { logoutAdmin } from "../auth/authService";
@@ -69,12 +70,49 @@ function AlertIcon() {
   );
 }
 
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
 /* =========================================================
    ADMIN PROFILE PAGE COMPONENT
    ========================================================= */
 
 function AdminProfilePage() {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
   const {
     profile,
     loading,
@@ -82,7 +120,10 @@ function AdminProfilePage() {
     updateProfile
   } = useAdminProfileSync();
 
+  const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [isNavigatingToReset, setIsNavigatingToReset] = useState(false);
 
@@ -91,22 +132,105 @@ function AdminProfilePage() {
   const [position, setPosition] = useState(() => profile?.position || "");
   const [department, setDepartment] = useState(() => profile?.department || "");
   const [phone, setPhone] = useState(() => profile?.phone || "");
+  const [photoUrl, setPhotoUrl] = useState(() => profile?.photoUrl || "");
 
   // Track previous profile reference to adjust form state when remote Firestore changes arrive (cross-device sync)
   const [prevProfile, setPrevProfile] = useState(profile);
   if (profile !== prevProfile) {
     setPrevProfile(profile);
-    if (!isDirty && profile) {
+    if (!isEditing && !isDirty && profile) {
       setName(profile.name || "");
       setPosition(profile.position || "");
       setDepartment(profile.department || "");
       setPhone(profile.phone || "");
+      if (typeof profile.photoUrl === "string") {
+        setPhotoUrl(profile.photoUrl);
+      }
     }
   }
 
   // Feedback states
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const activePhotoUrl = String(
+    isEditing ? photoUrl : photoUrl || profile?.photoUrl || ""
+  ).trim();
+  const hasVisiblePhoto = Boolean(
+    activePhotoUrl && activePhotoUrl !== failedPhotoUrl
+  );
+  const displayName = isEditing
+    ? name || profile?.name || "Admin User"
+    : profile?.name || name || "Admin User";
+
+  const handleStartEditing = (e) => {
+    if (e) e.preventDefault();
+    setSuccessMessage("");
+    setErrorMessage("");
+    setName(profile?.name || "");
+    setPosition(profile?.position || "");
+    setDepartment(profile?.department || "");
+    setPhone(profile?.phone || "");
+    setPhotoUrl(
+      typeof profile?.photoUrl === "string" && profile.photoUrl
+        ? profile.photoUrl
+        : photoUrl || ""
+    );
+    setIsDirty(false);
+    setIsEditing(true);
+  };
+
+  const handleCancelEditing = (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage("");
+    setName(profile?.name || "");
+    setPosition(profile?.position || "");
+    setDepartment(profile?.department || "");
+    setPhone(profile?.phone || "");
+    setPhotoUrl(
+      typeof profile?.photoUrl === "string" ? profile.photoUrl : ""
+    );
+    setFailedPhotoUrl("");
+    setIsDirty(false);
+    setIsEditing(false);
+  };
+
+  const handleTriggerPhotoPicker = () => {
+    if (!isEditing || uploadingPhoto || saving) return;
+    fileInputRef.current?.click();
+  };
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset input so selecting the same file again still fires onChange
+    e.target.value = "";
+    if (!file || !isEditing) return;
+
+    setSuccessMessage("");
+    setErrorMessage("");
+
+    try {
+      setUploadingPhoto(true);
+      const uploadedUrl = await uploadAdminProfilePhoto(file);
+      setPhotoUrl(uploadedUrl);
+      setFailedPhotoUrl("");
+      setIsDirty(true);
+    } catch (err) {
+      console.error("Upload profile photo error:", err);
+      setErrorMessage(err.message || "Failed to upload profile picture.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    if (!isEditing || !activePhotoUrl || uploadingPhoto || saving) return;
+    setSuccessMessage("");
+    setErrorMessage("");
+    setPhotoUrl("");
+    setFailedPhotoUrl("");
+    setIsDirty(true);
+  };
 
   // Direct immediately to forgot password with session logout & history replacement
   const handleGoToPasswordReset = async (e) => {
@@ -131,6 +255,8 @@ function AdminProfilePage() {
   // Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isEditing) return;
+
     setSuccessMessage("");
     setErrorMessage("");
 
@@ -157,11 +283,19 @@ function AdminProfilePage() {
         name: cleanName,
         position: cleanPosition,
         department: cleanDepartment,
-        phone: phone.trim()
+        phone: phone.trim(),
+        photoUrl
       });
 
       if (res.success) {
+        const savedPhotoUrl =
+          typeof res?.profile?.photoUrl === "string"
+            ? res.profile.photoUrl
+            : photoUrl;
+        setPhotoUrl(savedPhotoUrl);
+        setFailedPhotoUrl("");
         setIsDirty(false);
+        setIsEditing(false);
         setSuccessMessage(
           "Administrator profile updated successfully!"
         );
@@ -252,25 +386,54 @@ function AdminProfilePage() {
 
       {/* HERO BANNER CARD */}
       <section className="admin-profile-hero">
-        <div className="admin-profile-avatar-large">
-          <span>{getInitials(isDirty ? name : profile?.name || name || "Admin User")}</span>
+        <div className="admin-profile-avatar-wrapper">
+          <div className="admin-profile-avatar-large">
+            {hasVisiblePhoto ? (
+              <img
+                src={activePhotoUrl}
+                alt={displayName}
+                className="admin-profile-avatar-img"
+                onError={() => setFailedPhotoUrl(activePhotoUrl)}
+              />
+            ) : (
+              <span>{getInitials(displayName)}</span>
+            )}
+          </div>
+          {isEditing && (
+            <button
+              type="button"
+              className="admin-profile-avatar-camera-btn"
+              onClick={handleTriggerPhotoPicker}
+              disabled={uploadingPhoto || saving}
+              title={hasVisiblePhoto ? "Change profile picture" : "Add profile picture"}
+              aria-label={hasVisiblePhoto ? "Change profile picture" : "Add profile picture"}
+            >
+              <CameraIcon />
+            </button>
+          )}
         </div>
 
         <div className="admin-profile-hero-info">
           <div className="admin-profile-hero-title-row">
-            <h2>{isDirty ? name : profile?.name || name || "Admin User"}</h2>
+            <h2>{displayName}</h2>
             <span className="admin-profile-role-pill">Administrator</span>
           </div>
 
           <div className="admin-profile-hero-meta">
             <span className="admin-profile-meta-item" title="Position">
               <BriefcaseIcon />
-              <strong>Position:</strong> {isDirty ? position : profile?.position || position || "System Administrator"}
+              <strong>Position:</strong>{" "}
+              {isEditing
+                ? position || profile?.position || "System Administrator"
+                : profile?.position || position || "System Administrator"}
             </span>
 
             <span className="admin-profile-meta-item" title="Department">
               <BuildingIcon />
-              <strong>Department:</strong> {isDirty ? department : profile?.department || department || "Registrar's Office"}
+              <strong>Department:</strong>{" "}
+              {isEditing
+                ? department || profile?.department || "Registrar's Office"
+                : profile?.department || department || "Registrar's Office"}
             </span>
 
             <span className="admin-profile-meta-item" title="Email">
@@ -285,12 +448,119 @@ function AdminProfilePage() {
       <div className="admin-profile-grid">
         {/* LEFT COLUMN: EDIT PROFILE FORM */}
         <div className="admin-profile-card">
-          <div className="admin-profile-card-header">
-            <h3>Profile Information</h3>
-            <p>Update your personal information, position, and department designation.</p>
+          <div className="admin-profile-card-header admin-profile-card-header-row">
+            <div>
+              <h3>Profile Information</h3>
+              <p>
+                {isEditing
+                  ? "Edit your personal information, picture, position, and department, then click Save Changes."
+                  : "Profile details are locked. Click Edit below to make changes."}
+              </p>
+            </div>
+            <span
+              className={
+                isEditing
+                  ? "admin-profile-mode-badge editing"
+                  : "admin-profile-mode-badge locked"
+              }
+            >
+              {isEditing ? (
+                <>
+                  <EditIcon />
+                  Editing
+                </>
+              ) : (
+                <>
+                  <LockIcon />
+                  Locked
+                </>
+              )}
+            </span>
           </div>
 
           <form onSubmit={handleSubmit} className="admin-profile-form">
+            {/* PROFILE PICTURE UPLOAD */}
+            <div
+              className={
+                isEditing
+                  ? "admin-profile-photo-section"
+                  : "admin-profile-photo-section locked"
+              }
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/*"
+                onChange={handlePhotoChange}
+                disabled={!isEditing}
+                hidden
+              />
+
+              <div className="admin-profile-photo-preview">
+                {hasVisiblePhoto ? (
+                  <img
+                    src={activePhotoUrl}
+                    alt={displayName}
+                    className="admin-profile-avatar-img"
+                    onError={() => setFailedPhotoUrl(activePhotoUrl)}
+                  />
+                ) : (
+                  <span>{getInitials(displayName)}</span>
+                )}
+              </div>
+
+              <div className="admin-profile-photo-controls">
+                <span className="admin-profile-photo-label">Profile Picture</span>
+                <div className="admin-profile-photo-buttons">
+                  <button
+                    type="button"
+                    className="admin-profile-btn-upload"
+                    onClick={handleTriggerPhotoPicker}
+                    disabled={!isEditing || uploadingPhoto || saving}
+                    title={
+                      !isEditing
+                        ? "Click Edit below to unlock profile picture changes"
+                        : undefined
+                    }
+                  >
+                    {uploadingPhoto ? (
+                      <>
+                        <span className="admin-profile-btn-spinner admin-profile-btn-spinner-dark"></span>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <CameraIcon />
+                        {hasVisiblePhoto ? "Change Picture" : "Add Picture"}
+                      </>
+                    )}
+                  </button>
+
+                  {hasVisiblePhoto && (
+                    <button
+                      type="button"
+                      className="admin-profile-btn-remove-photo"
+                      onClick={handleRemovePhoto}
+                      disabled={!isEditing || uploadingPhoto || saving}
+                      title={
+                        !isEditing
+                          ? "Click Edit below to unlock profile picture changes"
+                          : undefined
+                      }
+                    >
+                      <TrashIcon />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <span className="admin-profile-input-hint">
+                  {isEditing
+                    ? "JPG, PNG, or WEBP up to 5 MB. Click Save Changes below to apply."
+                    : "Click Edit below to add, change, or remove your profile picture."}
+                </span>
+              </div>
+            </div>
+
             {/* FULL NAME */}
             <div className="admin-profile-form-group">
               <label htmlFor="admin-name">
@@ -302,10 +572,14 @@ function AdminProfilePage() {
                   type="text"
                   value={name}
                   onChange={(e) => {
+                    if (!isEditing) return;
                     setName(e.target.value);
                     setIsDirty(true);
                   }}
                   placeholder="e.g. Juan Dela Cruz"
+                  disabled={!isEditing}
+                  readOnly={!isEditing}
+                  className={!isEditing ? "admin-profile-input-locked" : ""}
                   required
                 />
               </div>
@@ -325,10 +599,14 @@ function AdminProfilePage() {
                   type="text"
                   value={position}
                   onChange={(e) => {
+                    if (!isEditing) return;
                     setPosition(e.target.value);
                     setIsDirty(true);
                   }}
                   placeholder="e.g. Registrar Officer, System Administrator"
+                  disabled={!isEditing}
+                  readOnly={!isEditing}
+                  className={!isEditing ? "admin-profile-input-locked" : ""}
                   required
                 />
               </div>
@@ -345,10 +623,14 @@ function AdminProfilePage() {
                   type="text"
                   value={department}
                   onChange={(e) => {
+                    if (!isEditing) return;
                     setDepartment(e.target.value);
                     setIsDirty(true);
                   }}
                   placeholder="e.g. Registrar's Office, Admissions Office"
+                  disabled={!isEditing}
+                  readOnly={!isEditing}
+                  className={!isEditing ? "admin-profile-input-locked" : ""}
                   required
                 />
               </div>
@@ -363,10 +645,14 @@ function AdminProfilePage() {
                   type="text"
                   value={phone}
                   onChange={(e) => {
+                    if (!isEditing) return;
                     setPhone(e.target.value);
                     setIsDirty(true);
                   }}
                   placeholder="e.g. +63 912 345 6789"
+                  disabled={!isEditing}
+                  readOnly={!isEditing}
+                  className={!isEditing ? "admin-profile-input-locked" : ""}
                 />
               </div>
             </div>
@@ -406,23 +692,46 @@ function AdminProfilePage() {
 
             {/* ACTIONS */}
             <div className="admin-profile-form-actions">
-              <button
-                type="submit"
-                disabled={saving}
-                className="admin-profile-btn-primary"
-              >
-                {saving ? (
-                  <>
-                    <span className="admin-profile-btn-spinner"></span>
-                    Saving Profile...
-                  </>
-                ) : (
-                  <>
-                    <CheckIcon />
-                    Save Changes
-                  </>
-                )}
-              </button>
+              {!isEditing ? (
+                <button
+                  key="edit-profile-btn"
+                  type="button"
+                  onClick={handleStartEditing}
+                  className="admin-profile-btn-primary"
+                >
+                  <EditIcon />
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    key="save-profile-btn"
+                    type="submit"
+                    disabled={saving || uploadingPhoto}
+                    className="admin-profile-btn-primary"
+                  >
+                    {saving ? (
+                      <>
+                        <span className="admin-profile-btn-spinner"></span>
+                        Saving Profile...
+                      </>
+                    ) : (
+                      <>
+                        <CheckIcon />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelEditing}
+                    disabled={saving || uploadingPhoto}
+                    className="admin-profile-btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </form>
         </div>
@@ -469,33 +778,6 @@ function AdminProfilePage() {
                 </span>
               </div>
             </div>
-          </div>
-
-          {/* ACCESS & RESPONSIBILITIES CARD */}
-          <div className="admin-profile-card">
-            <div className="admin-profile-card-header">
-              <h3>Administrative Privileges</h3>
-              <p>Permissions authorized for this administrator.</p>
-            </div>
-
-            <ul className="admin-profile-permissions-list">
-              <li>
-                <span className="permission-bullet"></span>
-                <span>Manage School Services & Department Guidelines</span>
-              </li>
-              <li>
-                <span className="permission-bullet"></span>
-                <span>Manage Transactions & Step-by-Step Procedures</span>
-              </li>
-              <li>
-                <span className="permission-bullet"></span>
-                <span>Publish & Broadcast School Announcements</span>
-              </li>
-              <li>
-                <span className="permission-bullet"></span>
-                <span>Search Portal Database & Inspect Activity Audit Logs</span>
-              </li>
-            </ul>
           </div>
 
           {/* SECURITY & CREDENTIALS CARD */}

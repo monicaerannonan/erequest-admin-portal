@@ -1,0 +1,846 @@
+/* =========================================================
+   STUDENT ACTIVITY LOGS PAGE
+   Matches E-ReQuest Admin Portal Executive Design System
+   ========================================================= */
+
+.student-logs-page {
+  width: 100%;
+  min-height: 100vh;
+  padding: 42px 48px;
+  color: #102544;
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.student-logs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.student-logs-header-text h1 {
+  margin: 0 0 8px;
+  font-size: 34px;
+  font-weight: 700;
+  color: #102544;
+}
+
+.student-logs-header-text p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7d96;
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   SUMMARY CARDS
+   ========================================================= */
+
+.student-logs-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 22px;
+  margin-bottom: 26px;
+}
+
+.student-summary-card {
+  min-height: 132px;
+  padding: 22px 25px;
+  background: #ffffff;
+  border: 1px solid #e1e8f1;
+  border-radius: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  box-shadow: 0 4px 14px rgba(23, 53, 87, 0.04);
+  box-sizing: border-box;
+}
+
+.summary-border-blue {
+  border-top: 3px solid #3485f6;
+}
+
+.summary-border-green {
+  border-top: 3px solid #25b873;
+}
+
+.summary-border-red {
+  border-top: 3px solid #ef4444;
+}
+
+.student-summary-card > div:first-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-summary-title {
+  margin-bottom: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #53657e;
+}
+
+.student-summary-number {
+  margin-bottom: 5px;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  color: #102544;
+}
+
+.student-summary-desc {
+  font-size: 12.5px;
+  color: #8493a8;
+}
+
+.student-summary-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-summary-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.icon-blue {
+  color: #3485f6;
+  background: #eaf3ff;
+}
+
+.icon-green {
+  color: #18a968;
+  background: #e7f7ef;
+}
+
+.icon-red {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+/* =========================================================
+   ERROR BANNER
+   ========================================================= */
+
+.student-logs-error-banner {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff5f5;
+  color: #b42318;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-logs-retry-btn {
+  padding: 6px 13px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.student-logs-retry-btn:hover {
+  background: #fee2e2;
+}
+
+/* =========================================================
+   MAIN TABLE CARD & TOOLBAR
+   ========================================================= */
+
+.student-logs-card {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e1e8f1;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 5px 18px rgba(23, 53, 87, 0.05);
+}
+
+.student-logs-toolbar {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e7edf5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.student-logs-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.student-filter-tab {
+  padding: 7px 13px;
+  border: 1px solid #dce5f0;
+  border-radius: 8px;
+  background: #f8fafd;
+  color: #53657e;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.student-filter-tab:hover {
+  background: #eef4fc;
+  color: #102544;
+}
+
+.student-filter-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.student-logs-search-box {
+  position: relative;
+  width: 340px;
+  max-width: 100%;
+}
+
+.student-logs-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: #8493a8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.student-logs-search-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.student-logs-search-box input {
+  width: 100%;
+  height: 38px;
+  padding: 0 13px 0 36px;
+  border: 1px solid #d6e0ec;
+  border-radius: 9px;
+  background: #f9fbfe;
+  color: #102544;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.student-logs-search-box input::placeholder {
+  color: #93a2b7;
+}
+
+.student-logs-search-box input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #3485f6;
+  box-shadow: 0 0 0 3px rgba(52, 133, 246, 0.14);
+}
+
+/* =========================================================
+   TABLE
+   ========================================================= */
+
+.student-logs-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.student-logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 960px;
+}
+
+.student-logs-table thead tr {
+  background: #f6f9fd;
+  border-bottom: 1px solid #e3ebf5;
+}
+
+.student-logs-table th {
+  padding: 13px 18px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5b6e88;
+  white-space: nowrap;
+}
+
+.student-logs-table td {
+  padding: 15px 18px;
+  border-bottom: 1px solid #edf2f8;
+  vertical-align: middle;
+  font-size: 13px;
+  color: #1d2d3e;
+}
+
+.student-logs-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.student-logs-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.student-logs-table tbody tr.row-limit-reached {
+  background: #fff9f9;
+}
+
+.student-logs-table tbody tr.row-limit-reached:hover {
+  background: #fff2f2;
+}
+
+.student-logs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.col-center {
+  text-align: center !important;
+}
+
+.col-nowrap {
+  white-space: nowrap;
+}
+
+/* =========================================================
+   CELL TYPOGRAPHY & BADGES
+   ========================================================= */
+
+.student-primary-id {
+  font-size: 14px;
+  font-weight: 700;
+  color: #102544;
+  letter-spacing: -0.01em;
+}
+
+.student-device-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+.student-date-primary {
+  font-size: 13px;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+.student-cell-subtext {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #8292a8;
+}
+
+/* Updated Student ID (Open on Phone) */
+.student-updated-id-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 220px;
+}
+
+.student-active-id-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.student-active-id-dropdown-btn {
+  cursor: pointer;
+  font-family: inherit;
+  transition: box-shadow 0.16s ease, transform 0.12s ease, border-color 0.16s ease;
+}
+
+.student-active-id-dropdown-btn:hover {
+  box-shadow: 0 2px 8px rgba(16, 37, 68, 0.09);
+}
+
+.student-active-id-dropdown-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.student-active-id-primary-text {
+  white-space: nowrap;
+}
+
+.student-active-id-count-pill {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(16, 37, 68, 0.1);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.student-active-id-chevron {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  transition: transform 0.18s ease;
+}
+
+.student-active-id-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.student-active-id-dropdown-btn.dropdown-open .student-active-id-chevron {
+  transform: rotate(180deg);
+}
+
+.student-active-id-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.active-id-normal {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.active-id-normal .student-active-id-dot {
+  background: #10b981;
+}
+
+.active-id-switched {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.active-id-switched .student-active-id-dot {
+  background: #f59e0b;
+}
+
+.active-id-limit {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.active-id-limit .student-active-id-dot {
+  background: #ef4444;
+}
+
+.student-accounts-dropdown-menu {
+  width: 100%;
+  min-width: 255px;
+  margin-top: 2px;
+  background: #ffffff;
+  border: 1px solid #d6e1ee;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(16, 37, 68, 0.08);
+  overflow: hidden;
+}
+
+.student-accounts-dropdown-header {
+  padding: 7px 11px;
+  background: #f6f9fd;
+  border-bottom: 1px solid #e6eef7;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5b6e88;
+}
+
+.student-accounts-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.student-accounts-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #f8fafd;
+  border: 1px solid transparent;
+}
+
+.student-accounts-dropdown-item.item-most-recent {
+  background: #eef5ff;
+  border-color: #bfdbfe;
+}
+
+.student-dropdown-item-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.student-dropdown-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7d96;
+}
+
+.student-dropdown-rank.rank-recent {
+  color: #1d4ed8;
+}
+
+.student-dropdown-id {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #102544;
+  white-space: nowrap;
+}
+
+.student-dropdown-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.student-dropdown-tag.tag-recent {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.student-dropdown-tag.tag-today {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.student-updated-id-caption {
+  font-size: 11.5px;
+  color: #7c8da5;
+}
+
+/* Unique Installation ID (UUID) */
+.student-uuid-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.student-uuid-chip {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f3f6fb;
+  border: 1px solid #dde6f2;
+  color: #465870;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  user-select: all;
+}
+
+.student-uuid-chip.uuid-chip-alert {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.student-uuid-copy-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dce5f0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #5b6e88;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.student-uuid-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.student-uuid-copy-btn:hover {
+  background: #eef4fc;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.student-uuid-copy-btn.copied {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+/* Opens & Daily Switches Pills */
+.student-opens-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-switches-pill {
+  display: inline-block;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.switch-level-normal {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.switch-level-switched {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.switch-level-limit_reached {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* Status Badges */
+.student-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.student-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-normal {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.status-normal .student-status-dot {
+  background: #10b981;
+}
+
+.status-switched {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.status-switched .student-status-dot {
+  background: #f59e0b;
+}
+
+.status-limit-reached {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.status-limit-reached .student-status-dot {
+  background: #ef4444;
+}
+
+/* =========================================================
+   EMPTY & LOADING STATES
+   ========================================================= */
+
+.student-logs-state-box {
+  padding: 46px 24px;
+  text-align: center;
+  font-size: 13.5px;
+  color: #7b8ca5;
+}
+
+.student-logs-empty-box {
+  min-height: 220px;
+  padding: 38px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.student-logs-empty-icon {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #edf4ff;
+  color: #3485f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-logs-empty-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.student-logs-empty-box strong {
+  margin-bottom: 5px;
+  font-size: 15px;
+  color: #172b4d;
+}
+
+.student-logs-empty-box span {
+  max-width: 460px;
+  font-size: 13px;
+  color: #8493a8;
+  line-height: 1.45;
+}
+
+/* =========================================================
+   PAGINATION FOOTER
+   ========================================================= */
+
+.student-logs-footer {
+  padding: 15px 24px;
+  border-top: 1px solid #e7edf5;
+  background: #fbfcfe;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.student-logs-footer-info {
+  font-size: 12.5px;
+  color: #6b7d96;
+}
+
+.student-logs-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-page-indicator {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3a4d66;
+}
+
+.student-page-btn {
+  padding: 6px 13px;
+  border: 1px solid #d6e0ec;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #1d2d3e;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.student-page-btn:hover:not(:disabled) {
+  background: #eef4fc;
+  border-color: #b8cdec;
+}
+
+.student-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   RESPONSIVE BREAKPOINTS
+   ========================================================= */
+
+@media (max-width: 1050px) {
+  .student-logs-page {
+    padding: 34px 30px;
+  }
+
+  .student-logs-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .student-logs-search-box {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .student-logs-page {
+    padding: 25px 20px;
+  }
+
+  .student-logs-header-text h1 {
+    font-size: 28px;
+  }
+
+  .student-logs-toolbar {
+    padding: 15px 18px;
+  }
+
+  .student-logs-footer {
+    padding: 14px 18px;
+  }
+}

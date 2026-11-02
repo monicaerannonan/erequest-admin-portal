@@ -8,6 +8,7 @@ import {
 import { getAllServices } from "../services/serviceService";
 import { getAllTransactions } from "../transactions/services/transactionService";
 import { getAllAnnouncements } from "../announcements/announcementService";
+import { subscribeToRegisteredStudentsCount } from "../studentLogs/studentLogService";
 import AdminSearch from "../search/AdminSearch";
 
 import "./DashboardPage.css";
@@ -64,6 +65,43 @@ function AnnouncementIcon() {
       />
       <path
         d="M8 13l1.5 5H12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function StudentsIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <circle
+        cx="9"
+        cy="8"
+        r="3.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M3.5 19c0-2.9 2.5-5 5.5-5s5.5 2.1 5.5 5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="17"
+        cy="9"
+        r="2.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M16 14.3c2.4.3 4.5 2 4.5 4.7"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -163,10 +201,12 @@ function DashboardPage() {
   const [serviceCount, setServiceCount] = useState(0);
   const [transactionCount, setTransactionCount] = useState(0);
   const [announcementCount, setAnnouncementCount] = useState(0);
+  const [registeredStudentCount, setRegisteredStudentCount] = useState(0);
 
   const [recentActivities, setRecentActivities] = useState([]);
 
   const [loading, setLoading] = useState(true);
+  const [studentsLoading, setStudentsLoading] = useState(true);
   const [recentLoading, setRecentLoading] = useState(true);
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -214,6 +254,22 @@ function DashboardPage() {
 
     fetchDashboardData();
 
+    // Subscribe to real-time unique registered students count across all devices
+    const unsubscribeStudents = subscribeToRegisteredStudentsCount(
+      (uniqueCount) => {
+        if (!ignore) {
+          setRegisteredStudentCount(uniqueCount);
+          setStudentsLoading(false);
+        }
+      },
+      (error) => {
+        console.error("Registered students count subscription error:", error);
+        if (!ignore) {
+          setStudentsLoading(false);
+        }
+      }
+    );
+
     // Subscribe to real-time activity logs with onSnapshot
     const unsubscribe = subscribeToRecentActivityLogs((activities) => {
         if (!ignore) {
@@ -232,6 +288,9 @@ function DashboardPage() {
 
     return () => {
       ignore = true;
+      if (typeof unsubscribeStudents === "function") {
+        unsubscribeStudents();
+      }
       if (typeof unsubscribe === "function") {
         unsubscribe();
       }
@@ -322,6 +381,27 @@ function DashboardPage() {
 
           <div className="summary-icon summary-icon-orange">
             <AnnouncementIcon />
+          </div>
+        </div>
+
+
+        <div className="summary-card summary-card-students">
+          <div>
+            <span className="summary-title">
+              Registered Students
+            </span>
+
+            <strong className="summary-number">
+              {studentsLoading ? "..." : registeredStudentCount}
+            </strong>
+
+            <span className="summary-description">
+              Unique students registered
+            </span>
+          </div>
+
+          <div className="summary-icon summary-icon-purple">
+            <StudentsIcon />
           </div>
         </div>
 

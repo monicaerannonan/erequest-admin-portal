@@ -14,6 +14,7 @@ service cloud.firestore {
     //   - department: string (required, 2-100 chars) - Office/department assignment
     //   - email: string (required, 5-150 chars, valid email format) - Admin email
     //   - phone: string (optional, 0-30 chars) - Contact phone number
+    //   - photoUrl: string (optional, 0-200000 chars) - Profile picture HTTPS URL or compressed data URI
     //   - role: string (required, exact value 'admin') - Access role
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Modification timestamp
     //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Creation timestamp
@@ -113,6 +114,47 @@ service cloud.firestore {
     //   - active: bool (required) - Token active status
     //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Registration timestamp
     //
+    // Collection: student_activity_logs
+    // Document ID: {installationId} (8-100 chars alphanumeric/underscore/hyphen, e.g., 36-char UUIDv4 or Android installation ID)
+    // Note: No student names are stored in this system — only Student Numbers (studentNumber, currentStudentNumber, loggedStudentNumbers, dailyStudentNumbers, studentNumbers).
+    // Fields:
+    //   - studentNumber: string (required, 1-50 chars) - Registered/initial student number on device
+    //   - currentStudentNumber: string (optional, 1-50 chars) - Currently active student number on device
+    //   - loggedStudentNumbers: list<string> (optional, 1-10 items, each 1-50 chars, index 0 == currentStudentNumber when present) - Ordered list of student numbers logged in on device (most recent open first)
+    //   - dailyStudentNumbers: list<string> (optional, 1-3 items, each 1-50 chars) - Distinct student numbers used on device on switchDate
+    //   - studentNumbers: list<string> (optional, 0-100 items, each 1-50 chars) - Unique student numbers opened on device
+    //   - deviceName: string (required, 1-150 chars) - Device model/manufacturer display name
+    //   - osVersion: string (optional, 0-100 chars) - Android OS version string
+    //   - installationId: string (required, 8-100 chars, matches ^[a-zA-Z0-9_\-]+$, immutable) - Unique app installation ID
+    //   - openCount: number (required, 1-10000000, monotonic non-decreasing) - Cumulative app launch count
+    //   - dailySwitchCount: number (required, 0-3) - Account switches performed on switchDate (max 3/day/device)
+    //   - switchDate: string (optional, 10 chars YYYY-MM-DD) - Date corresponding to dailySwitchCount
+    //   - status: string (optional, 'normal' | 'switched' | 'limit_reached') - Device switching status
+    //   - lastActiveAt: timestamp | number | string (optional, max 50 chars if string) - Last activity timestamp
+    //   - createdAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Initial log creation timestamp
+    //   - updatedAt: timestamp | number | string (optional, max 50 chars if string) - Last modification timestamp
+    //   - timestamp: timestamp | number | string (optional, max 50 chars if string) - Event timestamp
+    //   (Note: at least one of lastActiveAt, updatedAt, createdAt, or timestamp is required)
+    //
+    // Collection: students
+    // Document ID: {studentId} (Formatted student number matching ^(AU|BI|CA|CO|SA|SU|TA|XX)-[0-9]{4}-[0-9]{5}$)
+    // Note: No student names are stored — only Student Number, email for OTP verification, PBKDF2 PIN hash/salt, and device metadata.
+    // Fields:
+    //   - studentNumber: string (required, 13 chars, exact match with {studentId}, immutable) - Formatted student number
+    //   - campusCode: string (required, 'AU'|'BI'|'CA'|'CO'|'SA'|'SU'|'TA'|'XX', immutable) - ICCT campus code
+    //   - enrollmentYear: string (required, 4 digits ^[0-9]{4}$, immutable) - Enrollment year
+    //   - studentDigits: string (required, 5 digits ^[0-9]{5}$, immutable) - 5-digit student identifier
+    //   - email: string (required, 5-150 chars, valid email format, immutable for non-admins) - Registered OTP email
+    //   - pinHash: string (required, 64 hex chars ^[0-9a-fA-F]{64}$) - PBKDF2-HMAC-SHA256 4-digit PIN hash
+    //   - pinSalt: string (required, 32 hex chars ^[0-9a-fA-F]{32}$) - 16-byte random hex salt
+    //   - status: string (required, 'active' | 'blocked') - Account status
+    //   - deviceId: string (optional, 1-100 chars) - Last active device installation ID
+    //   - deviceName: string (optional, 1-150 chars) - Last active device display name
+    //   - osVersion: string (optional, 0-100 chars) - Last active Android OS version
+    //   - registeredAt: timestamp | number | string (optional, max 50 chars if string, immutable) - Initial registration timestamp
+    //   - lastLoginAt: timestamp | number | string (optional, max 50 chars if string) - Most recent login timestamp
+    //   - updatedAt: timestamp | number | string (required, max 50 chars if string) - Last modification timestamp
+    //
     // ===============================================================
 
     // ===============================================================
@@ -197,19 +239,52 @@ service cloud.firestore {
       return val is timestamp || val is number || (val is string && val.size() <= 50);
     }
 
+    // Validate a single student number list item (1-50 chars string)
+    function isValidStudentNumberItem(item) {
+      return item is string && item.size() >= 1 && item.size() <= 50;
+    }
+
+    // Validate bounded list of 1..10 student numbers (indices 0..9)
+    function isValidStudentNumberList10(arr) {
+      return arr is list &&
+        arr.size() >= 1 &&
+        arr.size() <= 10 &&
+        isValidStudentNumberItem(arr[0]) &&
+        (arr.size() <= 1 || isValidStudentNumberItem(arr[1])) &&
+        (arr.size() <= 2 || isValidStudentNumberItem(arr[2])) &&
+        (arr.size() <= 3 || isValidStudentNumberItem(arr[3])) &&
+        (arr.size() <= 4 || isValidStudentNumberItem(arr[4])) &&
+        (arr.size() <= 5 || isValidStudentNumberItem(arr[5])) &&
+        (arr.size() <= 6 || isValidStudentNumberItem(arr[6])) &&
+        (arr.size() <= 7 || isValidStudentNumberItem(arr[7])) &&
+        (arr.size() <= 8 || isValidStudentNumberItem(arr[8])) &&
+        (arr.size() <= 9 || isValidStudentNumberItem(arr[9]));
+    }
+
+    // Validate bounded list of 1..3 student numbers (indices 0..2)
+    function isValidStudentNumberList3(arr) {
+      return arr is list &&
+        arr.size() >= 1 &&
+        arr.size() <= 3 &&
+        isValidStudentNumberItem(arr[0]) &&
+        (arr.size() <= 1 || isValidStudentNumberItem(arr[1])) &&
+        (arr.size() <= 2 || isValidStudentNumberItem(arr[2]));
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
 
     // Validate admin document schema & values
     function isValidAdmin(data) {
-      return hasOnlyAllowedFields(['name', 'position', 'department', 'phone', 'email', 'role', 'updatedAt', 'createdAt']) &&
+      return hasOnlyAllowedFields(['name', 'position', 'department', 'phone', 'photoUrl', 'email', 'role', 'updatedAt', 'createdAt']) &&
         hasRequiredFields(['name', 'position', 'department', 'email', 'role', 'updatedAt']) &&
         data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
         data.position is string && data.position.size() >= 2 && data.position.size() <= 100 &&
         data.department is string && data.department.size() >= 2 && data.department.size() <= 100 &&
         data.email is string && isValidEmail(data.email) &&
         (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 200000)) &&
         data.role == 'admin' &&
         isValidTimestampField(data.updatedAt) &&
         (!('createdAt' in data) || isValidTimestampField(data.createdAt));
@@ -349,6 +424,104 @@ service cloud.firestore {
         isValidTimestampField(data.updatedAt);
     }
 
+    // Validate student activity log document schema & values
+    // Strictly stores student numbers only (no student names) and enforces max 3 switches/day
+    function isValidStudentActivityLog(data) {
+      return hasOnlyAllowedFields([
+          'studentNumber', 'currentStudentNumber', 'loggedStudentNumbers', 'dailyStudentNumbers',
+          'studentNumbers', 'deviceName', 'osVersion', 'installationId', 'openCount',
+          'dailySwitchCount', 'switchDate', 'status',
+          'lastActiveAt', 'createdAt', 'updatedAt', 'timestamp'
+        ]) &&
+        hasRequiredFields([
+          'studentNumber', 'deviceName', 'installationId', 'openCount', 'dailySwitchCount'
+        ]) &&
+        data.studentNumber is string && data.studentNumber.size() >= 1 && data.studentNumber.size() <= 50 &&
+        (!('currentStudentNumber' in data) || (data.currentStudentNumber is string && data.currentStudentNumber.size() >= 1 && data.currentStudentNumber.size() <= 50)) &&
+        (
+          !('loggedStudentNumbers' in data) ||
+          (
+            isValidStudentNumberList10(data.loggedStudentNumbers) &&
+            (!('currentStudentNumber' in data) || data.loggedStudentNumbers[0] == data.currentStudentNumber)
+          )
+        ) &&
+        (
+          !('dailyStudentNumbers' in data) ||
+          isValidStudentNumberList3(data.dailyStudentNumbers)
+        ) &&
+        (
+          !('studentNumbers' in data) ||
+          (
+            data.studentNumbers is list &&
+            data.studentNumbers.size() <= 100 &&
+            (
+              data.studentNumbers.size() == 0 ||
+              (
+                isValidStudentNumberItem(data.studentNumbers[0]) &&
+                isValidStudentNumberItem(data.studentNumbers[data.studentNumbers.size() - 1])
+              )
+            )
+          )
+        ) &&
+        data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 150 &&
+        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 100)) &&
+        data.installationId is string && data.installationId.size() >= 8 && data.installationId.size() <= 100 &&
+        data.installationId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.openCount is number && data.openCount >= 1 && data.openCount <= 10000000 &&
+        data.dailySwitchCount is number && data.dailySwitchCount >= 0 && data.dailySwitchCount <= 3 &&
+        data.dailySwitchCount in [0, 1, 2, 3] &&
+        (!('switchDate' in data) || (data.switchDate is string && data.switchDate.size() == 10 && data.switchDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))) &&
+        (!('status' in data) || (data.status is string && data.status in ['normal', 'switched', 'limit_reached'])) &&
+        ('lastActiveAt' in data || 'updatedAt' in data || 'createdAt' in data || 'timestamp' in data) &&
+        (!('lastActiveAt' in data) || isValidTimestampField(data.lastActiveAt)) &&
+        (!('createdAt' in data) || isValidTimestampField(data.createdAt)) &&
+        (!('updatedAt' in data) || isValidTimestampField(data.updatedAt)) &&
+        (!('timestamp' in data) || isValidTimestampField(data.timestamp));
+    }
+
+    // Validate student account document schema & values
+    function isValidStudent(studentId, data) {
+      return studentId is string &&
+        studentId.size() == 13 &&
+        studentId.matches('^(AU|BI|CA|CO|SA|SU|TA|XX)-[0-9]{4}-[0-9]{5}$') &&
+        hasOnlyAllowedFields([
+          'studentNumber', 'campusCode', 'enrollmentYear', 'studentDigits',
+          'email', 'pinHash', 'pinSalt', 'status',
+          'deviceId', 'deviceName', 'osVersion',
+          'registeredAt', 'lastLoginAt', 'updatedAt'
+        ]) &&
+        hasRequiredFields([
+          'studentNumber', 'campusCode', 'enrollmentYear', 'studentDigits',
+          'email', 'pinHash', 'pinSalt', 'status', 'updatedAt'
+        ]) &&
+        data.studentNumber is string &&
+        data.studentNumber == studentId &&
+        data.campusCode is string &&
+        data.campusCode in ['AU', 'BI', 'CA', 'CO', 'SA', 'SU', 'TA', 'XX'] &&
+        data.enrollmentYear is string &&
+        data.enrollmentYear.size() == 4 &&
+        data.enrollmentYear.matches('^[0-9]{4}$') &&
+        data.studentDigits is string &&
+        data.studentDigits.size() == 5 &&
+        data.studentDigits.matches('^[0-9]{5}$') &&
+        data.studentNumber == (data.campusCode + '-' + data.enrollmentYear + '-' + data.studentDigits) &&
+        isValidEmail(data.email) &&
+        data.pinHash is string &&
+        data.pinHash.size() == 64 &&
+        data.pinHash.matches('^[0-9a-fA-F]{64}$') &&
+        data.pinSalt is string &&
+        data.pinSalt.size() == 32 &&
+        data.pinSalt.matches('^[0-9a-fA-F]{32}$') &&
+        data.status is string &&
+        data.status in ['active', 'blocked'] &&
+        (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() >= 1 && data.deviceId.size() <= 100)) &&
+        (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 150)) &&
+        (!('osVersion' in data) || (data.osVersion is string && data.osVersion.size() >= 0 && data.osVersion.size() <= 100)) &&
+        isValidTimestampField(data.updatedAt) &&
+        (!('registeredAt' in data) || isValidTimestampField(data.registeredAt)) &&
+        (!('lastLoginAt' in data) || isValidTimestampField(data.lastLoginAt));
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -456,6 +629,77 @@ service cloud.firestore {
         isValidDeviceToken(request.resource.data);
 
       allow delete: if false;
+    }
+
+    // 10. STUDENT ACTIVITY LOGS COLLECTION
+    // Get: Single-document lookup by exact installationId (8-100 chars) for the Student Android app
+    //      to load loggedStudentNumbers (Student Login dropdown) & openCount/dailySwitchCount, or authorized admins
+    // List: Authorized administrators only (prevents bulk collection enumeration; enables Admin Portal table & Dashboard count)
+    // Create / Update: Student Android app (bound to installationId) or authorized administrators,
+    //                  enforcing monotonic openCount, non-decreasing same-day dailySwitchCount (max 3/day),
+    //                  immutable installationId & createdAt, and strict schema validation (student numbers only)
+    // Delete: Strictly forbidden (immutable audit trail)
+    match /student_activity_logs/{installationId} {
+      allow get: if (installationId.size() >= 8 && installationId.size() <= 100) ||
+        (isAuthenticated() && (isAdmin() || isDesignatedAdminEmail()));
+
+      allow list: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
+
+      allow create: if isValidStudentActivityLog(request.resource.data) &&
+        installationId == request.resource.data.installationId;
+
+      allow update: if isValidStudentActivityLog(request.resource.data) &&
+        installationId == request.resource.data.installationId &&
+        request.resource.data.installationId == resource.data.installationId &&
+        areImmutableFieldsUnchanged(['installationId', 'createdAt']) &&
+        (
+          (
+            request.resource.data.openCount >= resource.data.openCount &&
+            (
+              (!('switchDate' in resource.data) && ('switchDate' in request.resource.data)) ||
+              (
+                ('switchDate' in resource.data) &&
+                ('switchDate' in request.resource.data) &&
+                request.resource.data.switchDate != resource.data.switchDate
+              ) ||
+              request.resource.data.dailySwitchCount >= resource.data.dailySwitchCount
+            )
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if false;
+    }
+
+    // 11. STUDENTS COLLECTION
+    // Get: Single-document lookup by exact student number during registration/login/PIN reset (prevents bulk enumeration)
+    // List: Authorized administrators only
+    // Create: Student Android app registration (status == 'active') or authorized administrators, with strict schema & PBKDF2 validation
+    // Update: Active student accounts updating PIN/device/login timestamps (immutable identity & email fields) or authorized administrators,
+    //         enforcing isValidStudent on all updates to prevent Update Bypass
+    // Delete: Authorized administrators only
+    match /students/{studentId} {
+      allow get: if true;
+
+      allow list: if isAuthenticated() && (isAdmin() || isDesignatedAdminEmail());
+
+      allow create: if isValidStudent(studentId, request.resource.data) &&
+        (request.resource.data.status == 'active' || isAdmin());
+
+      allow update: if isValidStudent(studentId, request.resource.data) &&
+        (
+          isAdmin() ||
+          (
+            resource.data.status == 'active' &&
+            request.resource.data.status == 'active' &&
+            areImmutableFieldsUnchanged([
+              'studentNumber', 'campusCode', 'enrollmentYear',
+              'studentDigits', 'email', 'registeredAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin();
     }
 
     // ===============================================================

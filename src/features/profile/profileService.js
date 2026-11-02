@@ -17,6 +17,7 @@ import {
 } from "../auth/authService.js";
 
 import { addActivityLog } from "../dashboard/activityLogService.js";
+import { uploadProcedureImage } from "../../services/cloudinaryService.js";
 
 export const DEFAULT_PROFILE = {
   name: "Admin User",
@@ -24,8 +25,79 @@ export const DEFAULT_PROFILE = {
   department: "Registrar's Office",
   email: DEFAULT_ADMIN_EMAIL,
   phone: "",
+  photoUrl: "",
   role: "Administrator"
 };
+
+const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+function compressImageToDataUrl(file, size = 256, quality = 0.84) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Unable to read image file."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Invalid or corrupted image file."));
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Unable to process image preview."));
+            return;
+          }
+
+          // Center-crop square avatar
+          const minSide = Math.min(img.width, img.height);
+          const sx = Math.floor((img.width - minSide) / 2);
+          const sy = Math.floor((img.height - minSide) / 2);
+
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve(dataUrl);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Uploads an admin profile picture to Cloudinary with automatic compressed
+ * square avatar fallback so photo uploads succeed reliably.
+ */
+export async function uploadAdminProfilePhoto(file) {
+  if (!file) {
+    throw new Error("Please select an image file.");
+  }
+
+  if (!file.type || !file.type.startsWith("image/")) {
+    throw new Error("Please select a valid image file (JPG, PNG, WEBP).");
+  }
+
+  if (file.size > MAX_AVATAR_FILE_SIZE) {
+    throw new Error("Profile picture must not exceed 5 MB.");
+  }
+
+  try {
+    const cloudUrl = await uploadProcedureImage(file);
+    if (cloudUrl) {
+      return cloudUrl;
+    }
+  } catch (cloudErr) {
+    console.warn(
+      "[ProfileService] Cloudinary upload notice, using compressed avatar fallback:",
+      cloudErr?.message || cloudErr
+    );
+  }
+
+  return await compressImageToDataUrl(file, 256, 0.84);
+}
 
 export const PRESET_DEPARTMENTS = [
   "Registrar's Office",
@@ -180,6 +252,11 @@ export function normalizeProfileData(raw = {}, uid, fallback = null) {
   const currentEmail =
     raw.email || auth.currentUser?.email || fallback?.email || DEFAULT_ADMIN_EMAIL;
 
+  const resolvedPhotoUrl =
+    typeof raw.photoUrl === "string"
+      ? raw.photoUrl
+      : fallback?.photoUrl ?? auth.currentUser?.photoURL ?? "";
+
   return {
     name:
       raw.name ||
@@ -192,6 +269,7 @@ export function normalizeProfileData(raw = {}, uid, fallback = null) {
       raw.department || fallback?.department || DEFAULT_PROFILE.department,
     email: currentEmail,
     phone: raw.phone || fallback?.phone || "",
+    photoUrl: resolvedPhotoUrl,
     role:
       raw.role === "admin"
         ? "Administrator"
@@ -267,6 +345,10 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
   const cleanPhone = String(
     updatedFields.phone ?? currentRemote.phone ?? ""
   ).trim();
+  const cleanPhotoUrl =
+    updatedFields.photoUrl !== undefined
+      ? String(updatedFields.photoUrl || "").trim()
+      : String(currentRemote.photoUrl || "").trim();
 
   // 1. Validation
   const validation = validateProfile({
@@ -287,6 +369,7 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
     position: cleanPosition,
     department: cleanDepartment,
     phone: cleanPhone,
+    photoUrl: cleanPhotoUrl,
     email: currentEmail,
     role: "admin",
     updatedAt: nowIso
@@ -308,6 +391,7 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
           position: cleanPosition,
           department: cleanDepartment,
           phone: cleanPhone,
+          photoUrl: cleanPhotoUrl,
           role: "admin",
           updatedAt: nowIso
         },
@@ -318,12 +402,24 @@ export async function updateAdminProfile(updatedFields = {}, userId) {
     }
   }
 
-  // 3. Update Firebase Auth displayName if changed
-  if (auth.currentUser && auth.currentUser.displayName !== cleanName) {
-    try {
-      await updateAuthProfile(auth.currentUser, { displayName: cleanName });
-    } catch (authErr) {
-      console.warn("Auth displayName update notice:", authErr.message);
+  // 3. Update Firebase Auth displayName (and HTTP photoURL if within Auth URL limits)
+  if (auth.currentUser) {
+    const authPatch = {};
+    if (auth.currentUser.displayName !== cleanName) {
+      authPatch.displayName = cleanName;
+    }
+    const canSyncAuthPhoto =
+      cleanPhotoUrl === "" ||
+      (cleanPhotoUrl.startsWith("http") && cleanPhotoUrl.length <= 2000);
+    if (canSyncAuthPhoto && (auth.currentUser.photoURL || "") !== cleanPhotoUrl) {
+      authPatch.photoURL = cleanPhotoUrl;
+    }
+    if (Object.keys(authPatch).length > 0) {
+      try {
+        await updateAuthProfile(auth.currentUser, authPatch);
+      } catch (authErr) {
+        console.warn("Auth profile update notice:", authErr.message);
+      }
     }
   }
 

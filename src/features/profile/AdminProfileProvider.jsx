@@ -21,7 +21,10 @@ import { AdminProfileContext } from "./AdminProfileContext";
  * Subscribes to Firestore onSnapshot on mount and cleanly unsubscribes on unmount.
  * Cloud-First Single Source of Truth: Firestore (/admins/{uid}) without local storage caching.
  */
+const PROFILE_SCHEMA_REV = 2;
+
 export function AdminProfileProvider({ children, userId }) {
+  const schemaRev = PROFILE_SCHEMA_REV;
   const [profile, setProfile] = useState(() => ({
     ...DEFAULT_PROFILE,
     email: auth?.currentUser?.email || DEFAULT_PROFILE.email
@@ -38,7 +41,14 @@ export function AdminProfileProvider({ children, userId }) {
       userId,
       (updatedProfile) => {
         if (!isMounted) return;
-        setProfile(updatedProfile);
+        setProfile((prev) => ({
+          ...prev,
+          ...updatedProfile,
+          photoUrl:
+            typeof updatedProfile?.photoUrl === "string"
+              ? updatedProfile.photoUrl
+              : prev?.photoUrl || ""
+        }));
         setLoading(false);
         setIsSyncing(false);
         setLastSyncTime(new Date());
@@ -53,13 +63,27 @@ export function AdminProfileProvider({ children, userId }) {
       }
     );
 
+    getAdminProfile(userId)
+      .then((latest) => {
+        if (!isMounted || !latest) return;
+        setProfile((prev) => ({
+          ...prev,
+          ...latest,
+          photoUrl:
+            typeof latest.photoUrl === "string"
+              ? latest.photoUrl
+              : prev?.photoUrl || ""
+        }));
+      })
+      .catch(() => {});
+
     return () => {
       isMounted = false;
       if (typeof unsubscribe === "function") {
         unsubscribe();
       }
     };
-  }, [userId]);
+  }, [userId, schemaRev]);
 
   /**
    * Updates admin profile with immediate local optimism and Firestore real-time broadcast.
@@ -70,7 +94,14 @@ export function AdminProfileProvider({ children, userId }) {
       try {
         const result = await updateAdminProfile(updatedFields, userId);
         if (result.success && result.profile) {
-          setProfile(result.profile);
+          setProfile((prev) => ({
+            ...prev,
+            ...result.profile,
+            photoUrl:
+              typeof result.profile.photoUrl === "string"
+                ? result.profile.photoUrl
+                : prev?.photoUrl || ""
+          }));
         }
         setIsSyncing(false);
         return result;
@@ -90,7 +121,14 @@ export function AdminProfileProvider({ children, userId }) {
     try {
       const refreshed = await getAdminProfile(userId);
       if (refreshed) {
-        setProfile(refreshed);
+        setProfile((prev) => ({
+          ...prev,
+          ...refreshed,
+          photoUrl:
+            typeof refreshed.photoUrl === "string"
+              ? refreshed.photoUrl
+              : prev?.photoUrl || ""
+        }));
       }
       setIsSyncing(false);
       return refreshed;

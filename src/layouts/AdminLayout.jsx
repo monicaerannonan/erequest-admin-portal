@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   NavLink,
   Outlet,
@@ -88,6 +88,31 @@ function AnnouncementIcon() {
 }
 
 
+function StudentLogsIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <rect
+        x="5"
+        y="3"
+        width="14"
+        height="18"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M9 8h6M9 12h6M9 16h4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+
 function LogoutIcon() {
   return (
     <svg viewBox="0 0 24 24">
@@ -137,6 +162,11 @@ function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, initials } = useAdminProfile();
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState("");
+  const activeAvatarUrl = String(profile?.photoUrl || "").trim();
+  const showAvatarPhoto = Boolean(
+    activeAvatarUrl && activeAvatarUrl !== failedAvatarUrl
+  );
 
   /* Keep viewport position pristine and scroll to top upon page navigation */
   useEffect(() => {
@@ -313,6 +343,28 @@ function AdminLayout() {
           </NavLink>
 
 
+          {/* STUDENT ACTIVITY LOGS */}
+
+          <NavLink
+            to="/student-logs"
+            className={({ isActive }) =>
+              isActive
+                ? "admin-nav-item active"
+                : "admin-nav-item"
+            }
+          >
+
+            <span className="admin-nav-icon">
+              <StudentLogsIcon />
+            </span>
+
+            <span>
+              Student Activity Logs
+            </span>
+
+          </NavLink>
+
+
           {/* ADMIN PROFILE */}
 
           <NavLink
@@ -352,7 +404,16 @@ function AdminLayout() {
             <div className="admin-user">
 
               <div className="admin-user-avatar">
-                {initials}
+                {showAvatarPhoto ? (
+                  <img
+                    src={activeAvatarUrl}
+                    alt={profile?.name || "Admin User"}
+                    className="admin-user-avatar-img"
+                    onError={() => setFailedAvatarUrl(activeAvatarUrl)}
+                  />
+                ) : (
+                  initials
+                )}
               </div>
 
               <div className="admin-user-details">

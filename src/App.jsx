@@ -42,6 +42,9 @@ import AddAnnouncementPage
 import AdminProfilePage
   from "./features/profile/AdminProfilePage";
 
+import StudentActivityLogsPage
+  from "./features/studentLogs/StudentActivityLogsPage";
+
 function RouteLoadingFallback() {
   return (
     <div className="admin-splash-screen" style={{ minHeight: "60vh", background: "transparent" }}>
@@ -207,6 +210,14 @@ function App() {
             <Route
               path="/announcements/edit/:announcementId"
               element={<AddAnnouncementPage />}
+            />
+
+
+            {/* STUDENT ACTIVITY LOGS */}
+
+            <Route
+              path="/student-logs"
+              element={<StudentActivityLogsPage />}
             />
 
 
