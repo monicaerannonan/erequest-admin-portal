@@ -43,10 +43,26 @@ if (typeof window !== 'undefined') {
     'keydown',
     (e) => {
       const key = (e.key || '').toLowerCase()
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'u') {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey
+
+      // Block View Page Source (Ctrl+U / Cmd+U)
+      if (isCtrlOrMeta && !e.shiftKey && !e.altKey && key === 'u') {
         e.preventDefault()
         e.stopPropagation()
         window.open('about:blank', '_blank')
+        return
+      }
+
+      // Block DevTools / Inspect Element shortcuts:
+      // F12, Ctrl+Shift+I/J/C/K (Windows/Linux), Cmd+Opt+I/J/C (macOS)
+      const isF12 = e.key === 'F12' || e.keyCode === 123
+      const isDevToolsCombo =
+        (isCtrlOrMeta && e.shiftKey && ['i', 'j', 'c', 'k'].includes(key)) ||
+        (e.metaKey && e.altKey && ['i', 'j', 'c', 'k'].includes(key))
+
+      if (isF12 || isDevToolsCombo) {
+        e.preventDefault()
+        e.stopPropagation()
       }
     },
     true
