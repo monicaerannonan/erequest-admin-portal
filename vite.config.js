@@ -51,15 +51,28 @@ function blankViewSourcePlugin() {
     },
     enforce: 'post',
     generateBundle(_, bundle) {
+      const verticalBlankLines = Array.from({ length: 300 }, () => ' '.repeat(300)).join('\n')
+      const horizontalBlankPadding = ' '.repeat(60000)
+
+      // 1. Pad index.html so both View Source and Sources tab show pure blank space
       const indexAsset = bundle['index.html']
       if (indexAsset && indexAsset.type === 'asset' && typeof indexAsset.source === 'string') {
         const singleLineHtml = indexAsset.source
           .replace(/<!--[\s\S]*?-->/g, '')
           .replace(/\r?\n\s*/g, '')
           .trim()
-        const verticalBlankLines = Array.from({ length: 300 }, () => ' '.repeat(300)).join('\n')
-        const horizontalBlankPadding = ' '.repeat(60000)
         indexAsset.source = `${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}${singleLineHtml}`
+      }
+
+      // 2. Pad every JavaScript bundle chunk so clicking any JS file in Sources tab opens a blank white screen
+      for (const [fileName, file] of Object.entries(bundle)) {
+        if (file.type === 'chunk' && typeof file.code === 'string') {
+          const jsBlankComment = `/*${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}*/\n`
+          file.code = `${jsBlankComment}${file.code}`
+        } else if (file.type === 'asset' && typeof file.source === 'string' && fileName.endsWith('.css')) {
+          const cssBlankComment = `/*${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}*/\n`
+          file.source = `${cssBlankComment}${file.source}`
+        }
       }
     },
   }
