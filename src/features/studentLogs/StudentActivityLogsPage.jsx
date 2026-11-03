@@ -160,7 +160,7 @@ function truncateInstallationId(uuid = "") {
    ========================================================= */
 
 function StudentActivityLogsPage() {
-  const { vaultKey, decryptText, openVaultModal, lockVault } = useVault();
+  const { vaultKey, decryptText } = useVault();
   const isMasterActive = Boolean(vaultKey || getActiveMasterCryptoKey());
   const [logs, setLogs] = useState([]);
   const [decryptedMap, setDecryptedMap] = useState({});
@@ -533,42 +533,6 @@ function StudentActivityLogsPage() {
             Monitor student numbers, active Student ID open on each phone,
             unique device UUIDs, app opens, and device account switches.
           </p>
-        </div>
-
-        <div className="student-logs-header-vault">
-          {isMasterActive ? (
-            <div className="student-vault-badge unlocked" title="Master Password active: hardware device models and OS versions are decrypted.">
-              <span className="vault-badge-indicator" />
-              <div className="vault-badge-text">
-                <span className="vault-badge-label">Master Key Active</span>
-                <span className="vault-badge-subtext">Unit Models Revealed</span>
-              </div>
-              <button
-                type="button"
-                className="vault-badge-action-btn lock"
-                onClick={lockVault}
-                title="Lock vault to mask device names back to 'Android Device'"
-              >
-                Mask (Lock)
-              </button>
-            </div>
-          ) : (
-            <div className="student-vault-badge locked" title="Normal Password mode: hardware device models are masked as 'Android Device' for security and privacy.">
-              <span className="vault-badge-indicator" />
-              <div className="vault-badge-text">
-                <span className="vault-badge-label">Normal Password Mode</span>
-                <span className="vault-badge-subtext">Generic Device View</span>
-              </div>
-              <button
-                type="button"
-                className="vault-badge-action-btn unlock"
-                onClick={() => openVaultModal("unlock")}
-                title="Enter Master Password to reveal real device unit names"
-              >
-                Reveal Unit Names
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
