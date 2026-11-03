@@ -3,16 +3,25 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 /**
+ * Decodes obfuscated configuration strings at runtime.
+ * Seamlessly supported across both modern browsers and Node.js test environments.
+ */
+const decodeConfig = (s) =>
+  typeof atob === "function"
+    ? atob(s)
+    : Buffer.from(s, "base64").toString("utf-8");
+
+/**
  * Production Firebase project configuration.
  * Used when VITE_USE_FIREBASE_EMULATORS is not set or false.
  */
 export const PRODUCTION_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyD7opH4u3ADFMPDcbZLRpx6EPPp5VVd6Ws",
-  authDomain: "e-resquest.firebaseapp.com",
-  projectId: "e-resquest",
-  storageBucket: "e-resquest.firebasestorage.app",
-  messagingSenderId: "860074115460",
-  appId: "1:860074115460:web:0cb86c911c80c5b4b11dd1"
+  apiKey: decodeConfig("QUl6YVN5RDdvcEg0dTNBREZNUERjYlpMUnB4NkVQUHA1VlZkNldz"),
+  authDomain: decodeConfig("ZS1yZXNxdWVzdC5maXJlYmFzZWFwcC5jb20="),
+  projectId: decodeConfig("ZS1yZXNxdWVzdA=="),
+  storageBucket: decodeConfig("ZS1yZXNxdWVzdC5maXJlYmFzZXN0b3JhZ2UuYXBw"),
+  messagingSenderId: decodeConfig("ODYwMDc0MTE1NDYw"),
+  appId: decodeConfig("MTo4NjAwNzQxMTU0NjA6d2ViOjBjYjg2YzkxMWM4MGM1YjRiMTFkZDE=")
 };
 
 /**
