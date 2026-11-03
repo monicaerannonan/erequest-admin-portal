@@ -6,6 +6,7 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
  * Decodes obfuscated configuration strings at runtime.
  * Seamlessly supported across both modern browsers and Node.js test environments.
  */
+/* global Buffer */
 const decodeConfig = (s) =>
   typeof atob === "function"
     ? atob(s)
