@@ -171,6 +171,12 @@ test("formatDeviceNameDisplay and formatOsVersionDisplay handle plaintext, encry
   assert.equal(formatDeviceNameDisplay(null), "Unknown Device");
   assert.equal(formatOsVersionDisplay(""), "");
   assert.equal(formatOsVersionDisplay(null), "");
+
+  // Normal password mode (isMasterActive = false) masks hardware model to Android Device & Android OS
+  assert.equal(formatDeviceNameDisplay("Samsung Galaxy A53", "", false), "Android Device");
+  assert.equal(formatDeviceNameDisplay("Xiaomi 2312DRA50G", "", false), "Android Device");
+  assert.equal(formatOsVersionDisplay("Android 13", "", false), "Android OS");
+  assert.equal(formatOsVersionDisplay("16", "", false), "Android OS");
 });
 
 test("decryptCatalogField decrypts ciphertext encrypted with active master key seamlessly", async () => {

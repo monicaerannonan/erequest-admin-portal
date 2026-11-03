@@ -10,6 +10,7 @@ import {
   formatOsVersionDisplay
 } from "./studentLogService";
 import { useVault } from "../vault/VaultContext";
+import { getActiveMasterCryptoKey } from "../../utils/vaultCrypto";
 
 import "./StudentActivityLogsPage.css";
 
@@ -159,7 +160,8 @@ function truncateInstallationId(uuid = "") {
    ========================================================= */
 
 function StudentActivityLogsPage() {
-  const { vaultKey, decryptText } = useVault();
+  const { vaultKey, decryptText, openVaultModal, lockVault } = useVault();
+  const isMasterActive = Boolean(vaultKey || getActiveMasterCryptoKey());
   const [logs, setLogs] = useState([]);
   const [decryptedMap, setDecryptedMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -172,9 +174,17 @@ function StudentActivityLogsPage() {
   const [copiedId, setCopiedId] = useState("");
   const [openDropdownRowId, setOpenDropdownRowId] = useState("");
 
-  /* Decrypt encrypted fields in real time automatically */
+  /* Decrypt encrypted fields in real time automatically when Master Key is active */
+  const activeDecryptedMap = useMemo(
+    () => (isMasterActive ? decryptedMap : {}),
+    [isMasterActive, decryptedMap]
+  );
+
   useEffect(() => {
     let active = true;
+    if (!isMasterActive) {
+      return undefined;
+    }
     async function decryptAll() {
       const map = {};
       for (const log of logs) {
@@ -193,7 +203,7 @@ function StudentActivityLogsPage() {
     return () => {
       active = false;
     };
-  }, [logs, vaultKey, decryptText]);
+  }, [logs, isMasterActive, decryptText]);
 
   useEffect(() => {
     if (!openDropdownRowId) return undefined;
@@ -331,12 +341,14 @@ function StudentActivityLogsPage() {
         : false;
 
       const resolvedDevice = formatDeviceNameDisplay(
-        decryptedMap[item.deviceName] || item.deviceName,
-        item.fallbackDeviceName
+        activeDecryptedMap[item.deviceName] || item.deviceName,
+        item.fallbackDeviceName,
+        isMasterActive
       ).toLowerCase();
       const resolvedOs = formatOsVersionDisplay(
-        decryptedMap[item.osVersion] || item.osVersion,
-        item.fallbackOsVersion
+        activeDecryptedMap[item.osVersion] || item.osVersion,
+        item.fallbackOsVersion,
+        isMasterActive
       ).toLowerCase();
 
       return (
@@ -348,7 +360,7 @@ function StudentActivityLogsPage() {
         item.installationId.toLowerCase().includes(cleanQuery)
       );
     });
-  }, [logs, decryptedMap, searchQuery, statusFilter]);
+  }, [logs, activeDecryptedMap, searchQuery, statusFilter, isMasterActive]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -521,6 +533,42 @@ function StudentActivityLogsPage() {
             Monitor student numbers, active Student ID open on each phone,
             unique device UUIDs, app opens, and device account switches.
           </p>
+        </div>
+
+        <div className="student-logs-header-vault">
+          {isMasterActive ? (
+            <div className="student-vault-badge unlocked" title="Master Password active: hardware device models and OS versions are decrypted.">
+              <span className="vault-badge-indicator" />
+              <div className="vault-badge-text">
+                <span className="vault-badge-label">Master Key Active</span>
+                <span className="vault-badge-subtext">Unit Models Revealed</span>
+              </div>
+              <button
+                type="button"
+                className="vault-badge-action-btn lock"
+                onClick={lockVault}
+                title="Lock vault to mask device names back to 'Android Device'"
+              >
+                Mask (Lock)
+              </button>
+            </div>
+          ) : (
+            <div className="student-vault-badge locked" title="Normal Password mode: hardware device models are masked as 'Android Device' for security and privacy.">
+              <span className="vault-badge-indicator" />
+              <div className="vault-badge-text">
+                <span className="vault-badge-label">Normal Password Mode</span>
+                <span className="vault-badge-subtext">Generic Device View</span>
+              </div>
+              <button
+                type="button"
+                className="vault-badge-action-btn unlock"
+                onClick={() => openVaultModal("unlock")}
+                title="Enter Master Password to reveal real device unit names"
+              >
+                Reveal Unit Names
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -739,20 +787,23 @@ function StudentActivityLogsPage() {
                         <td>
                           <div className="student-device-name">
                             {formatDeviceNameDisplay(
-                              decryptedMap[log.deviceName] || log.deviceName,
-                              log.fallbackDeviceName
+                              activeDecryptedMap[log.deviceName] || log.deviceName,
+                              log.fallbackDeviceName,
+                              isMasterActive
                             )}
                           </div>
                           {Boolean(
                             formatOsVersionDisplay(
-                              decryptedMap[log.osVersion] || log.osVersion,
-                              log.fallbackOsVersion
+                              activeDecryptedMap[log.osVersion] || log.osVersion,
+                              log.fallbackOsVersion,
+                              isMasterActive
                             )
                           ) && (
                             <div className="student-cell-subtext">
                               {formatOsVersionDisplay(
-                                decryptedMap[log.osVersion] || log.osVersion,
-                                log.fallbackOsVersion
+                                activeDecryptedMap[log.osVersion] || log.osVersion,
+                                log.fallbackOsVersion,
+                                isMasterActive
                               )}
                             </div>
                           )}

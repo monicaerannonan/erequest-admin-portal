@@ -35,7 +35,8 @@ export function VaultProvider({ children }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("unlock");
 
-  const isVaultUnlocked = true; // Always unlocked for admin operations
+  const isVaultUnlocked = Boolean(vaultKey);
+  const isMasterActive = Boolean(vaultKey);
 
   // Keep React state in sync whenever loginAdmin sets or clears the active Master Key
   useEffect(() => {
@@ -181,6 +182,7 @@ export function VaultProvider({ children }) {
     vaultConfig,
     isVaultConfigured,
     isVaultUnlocked,
+    isMasterActive,
     vaultKey,
     isCheckingSession,
     isModalOpen,

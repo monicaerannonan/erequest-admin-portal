@@ -70,7 +70,10 @@ export function normalizeStudentNumberKey(value) {
   return clean;
 }
 
-export function formatDeviceNameDisplay(val, fallback = "") {
+export function formatDeviceNameDisplay(val, fallback = "", isMasterActive = true) {
+  if (!isMasterActive) {
+    return "Android Device";
+  }
   if (!val) return fallback || "Unknown Device";
   const str = String(val).trim();
   if (str.startsWith("enc:v1:") || str === "🔒 [Encrypted]") {
@@ -79,7 +82,10 @@ export function formatDeviceNameDisplay(val, fallback = "") {
   return str;
 }
 
-export function formatOsVersionDisplay(val, fallback = "") {
+export function formatOsVersionDisplay(val, fallback = "", isMasterActive = true) {
+  if (!isMasterActive) {
+    return "Android OS";
+  }
   if (!val) return fallback || "";
   const str = String(val).trim();
   if (str.startsWith("enc:v1:") || str === "🔒 [Encrypted]") {
