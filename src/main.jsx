@@ -4,6 +4,22 @@ import './index.css'
 import App from './App.jsx'
 
 if (typeof window !== 'undefined') {
+  // Console Security Notice (Enterprise defense-in-depth, like Google/Facebook/Discord)
+  if (!import.meta.env.DEV) {
+    const bannerStyleTitle =
+      'color: #ef4444; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 2.2rem; font-weight: 800; -webkit-text-stroke: 1px #991b1b;'
+    const bannerStyleText =
+      'color: #334155; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 1.05rem; line-height: 1.6; font-weight: 500;'
+
+    console.log('%cSTOP! Access Warning', bannerStyleTitle)
+    console.log(
+      '%cThis browser feature is intended for authorized developers only.\n' +
+        'Source code is minified with sourcemaps disabled.\n' +
+        'Database records are protected by client-side AES-256-GCM encryption and server-side Cloud Firestore Security Rules.',
+      bannerStyleText
+    )
+  }
+
   if (import.meta.env.DEV) {
     const notifyActive = () => {
       fetch('/__view_source_guard?action=active', {
@@ -30,43 +46,6 @@ if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', notifyUnload)
     window.addEventListener('pagehide', notifyUnload)
   }
-
-  window.addEventListener(
-    'contextmenu',
-    (e) => {
-      e.preventDefault()
-    },
-    true
-  )
-
-  window.addEventListener(
-    'keydown',
-    (e) => {
-      const key = (e.key || '').toLowerCase()
-      const isCtrlOrMeta = e.ctrlKey || e.metaKey
-
-      // Block View Page Source (Ctrl+U / Cmd+U)
-      if (isCtrlOrMeta && !e.shiftKey && !e.altKey && key === 'u') {
-        e.preventDefault()
-        e.stopPropagation()
-        window.open('about:blank', '_blank')
-        return
-      }
-
-      // Block DevTools / Inspect Element shortcuts:
-      // F12, Ctrl+Shift+I/J/C/K (Windows/Linux), Cmd+Opt+I/J/C (macOS)
-      const isF12 = e.key === 'F12' || e.keyCode === 123
-      const isDevToolsCombo =
-        (isCtrlOrMeta && e.shiftKey && ['i', 'j', 'c', 'k'].includes(key)) ||
-        (e.metaKey && e.altKey && ['i', 'j', 'c', 'k'].includes(key))
-
-      if (isF12 || isDevToolsCombo) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    },
-    true
-  )
 }
 
 createRoot(document.getElementById('root')).render(

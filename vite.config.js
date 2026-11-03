@@ -69,6 +69,7 @@ export default defineConfig(({ command, mode }) => ({
   plugins: [react(), blankViewSourcePlugin()],
   base: command === 'build' || mode === 'production' ? '/erequest-admin-portal/' : '/',
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
