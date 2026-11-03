@@ -7,7 +7,6 @@ import {
   sendPasswordResetOTP,
   verifyPasswordResetOTP,
   setNewAdminPassword,
-  sendDirectFirebaseResetEmail,
   logoutAdmin,
   validatePasswordCriteria,
   isSameAsOlderPassword,
@@ -249,34 +248,6 @@ function LoginPage({ initialMode = "login" }) {
       console.error("Failed to send OTP:", error);
       setErrorMessage(
         error.message || "Failed to send verification OTP. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* Direct Firebase cloud reset fallback */
-  const handleDirectFirebaseReset = async () => {
-    setErrorMessage("");
-    setSuccessMessage("");
-    setInfoMessage("");
-
-    const targetEmail = resetEmail.trim();
-    if (!targetEmail) {
-      setErrorMessage("Please enter your administrator email address.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      await sendDirectFirebaseResetEmail(targetEmail);
-      setSuccessMessage(
-        `Official Firebase password reset link sent to ${targetEmail}. Please check your Gmail inbox or spam folder to reset your password directly on Google.`
-      );
-    } catch (err) {
-      console.error("Firebase direct reset email error:", err);
-      setErrorMessage(
-        err.message || "Failed to send Firebase reset email. Please try again."
       );
     } finally {
       setLoading(false);
@@ -575,26 +546,6 @@ function LoginPage({ initialMode = "login" }) {
             >
               Back to Sign In
             </button>
-
-            <div style={{ textAlign: "center", marginTop: "10px" }}>
-              <button
-                type="button"
-                className="firebase-direct-reset-link"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#2563eb",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                  padding: "4px"
-                }}
-                onClick={handleDirectFirebaseReset}
-                disabled={loading}
-              >
-                Send official Firebase reset link to Gmail instead
-              </button>
-            </div>
           </form>
         )}
 
@@ -665,26 +616,6 @@ function LoginPage({ initialMode = "login" }) {
             >
               Cancel and Return to Sign In
             </button>
-
-            <div style={{ textAlign: "center", marginTop: "10px" }}>
-              <button
-                type="button"
-                className="firebase-direct-reset-link"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#2563eb",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                  padding: "4px"
-                }}
-                onClick={handleDirectFirebaseReset}
-                disabled={loading}
-              >
-                Didn&apos;t receive OTP? Send official Firebase reset email
-              </button>
-            </div>
           </form>
         )}
 

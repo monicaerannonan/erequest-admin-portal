@@ -16,6 +16,7 @@ import {
 } from "../../utils/timestampUtils.js";
 import {
   CIPHER_PREFIX,
+  decryptVaultField,
   encryptVaultField,
   getActiveMasterCryptoKey,
   getCatalogCryptoKey
@@ -400,8 +401,19 @@ async function autoEncryptPlaintextStudentDocs(rawLogDocs = [], rawStudentDocs =
       const docId = stDoc?.id;
       if (!docId || inFlightAutoEncryptIds.has(`st:${docId}`)) continue;
       const updates = {};
-      if (stDoc.email && !String(stDoc.email).startsWith(CIPHER_PREFIX)) {
-        updates.email = await encryptVaultField(stDoc.email, catalogKey);
+      if (stDoc.email) {
+        const emailStr = String(stDoc.email);
+        if (!emailStr.startsWith(CIPHER_PREFIX)) {
+          updates.email = await encryptVaultField(emailStr, catalogKey);
+        } else if (getActiveMasterCryptoKey()) {
+          const decCatalog = await decryptVaultField(emailStr, catalogKey, null);
+          if (!decCatalog || decCatalog.startsWith(CIPHER_PREFIX)) {
+            const decMaster = await decryptVaultField(emailStr, getActiveMasterCryptoKey(), null);
+            if (decMaster && !decMaster.startsWith(CIPHER_PREFIX) && decMaster !== "🔒 [Encrypted]") {
+              updates.email = await encryptVaultField(decMaster, catalogKey);
+            }
+          }
+        }
       }
       if (stDoc.deviceName && !String(stDoc.deviceName).startsWith(CIPHER_PREFIX)) {
         updates.deviceName = await encryptVaultField(stDoc.deviceName, deviceKey);

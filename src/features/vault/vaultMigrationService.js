@@ -30,6 +30,24 @@ async function ensureEncryptedWithMasterKey(rawValue, masterCryptoKey, catalogKe
   return null;
 }
 
+async function ensureEncryptedWithCatalogKey(rawValue, masterCryptoKey, catalogKey) {
+  if (!rawValue || typeof rawValue !== "string") return null;
+  if (!rawValue.startsWith(CIPHER_PREFIX)) {
+    return await encryptVaultField(rawValue, catalogKey);
+  }
+  const decryptedByCatalog = await decryptVaultField(rawValue, catalogKey, null);
+  if (decryptedByCatalog && decryptedByCatalog !== rawValue && !decryptedByCatalog.startsWith(CIPHER_PREFIX)) {
+    return null;
+  }
+  if (masterCryptoKey) {
+    const decryptedByMaster = await decryptVaultField(rawValue, masterCryptoKey, null);
+    if (decryptedByMaster && decryptedByMaster !== rawValue && !decryptedByMaster.startsWith(CIPHER_PREFIX)) {
+      return await encryptVaultField(decryptedByMaster, catalogKey);
+    }
+  }
+  return null;
+}
+
 /**
  * Encrypts all existing plaintext records in the database:
  * - Sensitive logs, admin profiles, student device metadata (using user's Master cryptoKey)
@@ -274,8 +292,9 @@ export async function encryptEntireDatabase(cryptoKey, onProgress = null) {
       const data = docSnap.data();
       const updates = {};
 
-      if (data.email && !String(data.email).startsWith(CIPHER_PREFIX)) {
-        updates.email = await encryptVaultField(data.email, catalogKey);
+      const nextEmail = await ensureEncryptedWithCatalogKey(data.email, cryptoKey, catalogKey);
+      if (nextEmail) {
+        updates.email = nextEmail;
       }
       const nextDeviceName = await ensureEncryptedWithMasterKey(data.deviceName, cryptoKey, catalogKey);
       if (nextDeviceName) {

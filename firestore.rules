@@ -713,7 +713,7 @@ service cloud.firestore {
         (request.resource.data.status == 'active' || isAdmin()) &&
         (!('deviceId' in request.resource.data) ||
           !exists(/databases/$(database)/documents/student_activity_logs/$(request.resource.data.deviceId)) ||
-          get(/databases/$(database)/documents/student_activity_logs/$(request.resource.data.deviceId)).data.dailySwitchCount < 3);
+          get(/databases/$(database)/documents/student_activity_logs/$(request.resource.data.deviceId)).data.dailySwitchCount <= 3);
 
       allow update: if isValidStudent(studentId, request.resource.data) &&
         (
@@ -727,7 +727,8 @@ service cloud.firestore {
             ]) &&
             (
               request.resource.data.email == resource.data.email ||
-              (resource.data.email is string && resource.data.email.matches('^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$'))
+              (resource.data.email is string && resource.data.email.matches('^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$')) ||
+              (request.resource.data.email is string && request.resource.data.email.matches('^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$'))
             )
           )
         );
