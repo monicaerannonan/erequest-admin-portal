@@ -1,12 +1,14 @@
 import {
-  Suspense
+  Suspense,
+  useEffect
 } from "react";
 
 import {
   HashRouter,
   Navigate,
   Route,
-  Routes
+  Routes,
+  useLocation
 } from "react-router-dom";
 
 import ProtectedRoute
@@ -66,11 +68,58 @@ function RouteLoadingFallback() {
   );
 }
 
+function PageSecurityGuard() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // 1. Block right-click context menu across all pages
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+    };
+
+    // 2. Block Inspect Element & View Source keyboard combinations
+    const handleKeyDown = (e) => {
+      const key = (e.key || "").toLowerCase();
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+      // Block View Page Source (Ctrl+U / Cmd+U) and Save Page (Ctrl+S / Cmd+S)
+      if (isCtrlOrMeta && !e.shiftKey && !e.altKey && (key === "u" || key === "s")) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // Block DevTools shortcuts: F12, Ctrl+Shift+I/J/C/K, Cmd+Opt+I/J/C
+      const isF12 = e.key === "F12" || e.keyCode === 123;
+      const isDevToolsCombo =
+        (isCtrlOrMeta && e.shiftKey && ["i", "j", "c", "k"].includes(key)) ||
+        (e.metaKey && e.altKey && ["i", "j", "c", "k"].includes(key));
+
+      if (isF12 || isDevToolsCombo) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener("contextmenu", handleContextMenu, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [location.pathname]);
+
+  return null;
+}
+
 function App() {
 
   return (
 
     <HashRouter>
+
+      <PageSecurityGuard />
 
       <ErrorBoundary>
 
