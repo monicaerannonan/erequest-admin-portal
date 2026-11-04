@@ -186,12 +186,8 @@ service cloud.firestore {
       return isAuthenticated() &&
         'email' in request.auth.token &&
         (
-          request.auth.token.email in [
-            'erequesticctadmin@gmail.com',
-            'erequestadmin@gmail.com',
-            'admin.erequesticct@gmail.com'
-          ] ||
-          request.auth.token.email.matches('(?i)^(erequesticctadmin|erequestadmin|admin\\.erequesticct)@gmail\\.com$')
+          request.auth.token.email == 'erequesticctadmin@gmail.com' ||
+          request.auth.token.email.matches('(?i)^erequesticctadmin@gmail\\.com$')
         );
     }
 
