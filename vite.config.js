@@ -25,9 +25,10 @@ function blankViewSourcePlugin() {
 
         const isHtmlNavigation =
           req.method === 'GET' &&
-          (url === '/' || url.startsWith('/?') || url.startsWith('/index.html')) &&
           req.headers.accept &&
-          req.headers.accept.includes('text/html')
+          req.headers.accept.includes('text/html') &&
+          !url.includes('@') &&
+          !url.match(/\.(js|jsx|ts|tsx|css|json|png|jpg|jpeg|svg|ico|woff|woff2)$/i)
 
         if (isHtmlNavigation) {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -49,6 +50,15 @@ function blankViewSourcePlugin() {
         next()
       })
     },
+    transformIndexHtml(html) {
+      const verticalBlankLines = Array.from({ length: 300 }, () => ' '.repeat(300)).join('\n')
+      const horizontalBlankPadding = ' '.repeat(60000)
+      const cleanHtml = html
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/\r?\n\s*/g, ' ')
+        .trim()
+      return `${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}${cleanHtml}`
+    },
     enforce: 'post',
     generateBundle(_, bundle) {
       const verticalBlankLines = Array.from({ length: 300 }, () => ' '.repeat(300)).join('\n')
@@ -57,11 +67,13 @@ function blankViewSourcePlugin() {
       // 1. Pad index.html so both View Source and Sources tab show pure blank space
       const indexAsset = bundle['index.html']
       if (indexAsset && indexAsset.type === 'asset' && typeof indexAsset.source === 'string') {
-        const singleLineHtml = indexAsset.source
-          .replace(/<!--[\s\S]*?-->/g, '')
-          .replace(/\r?\n\s*/g, '')
-          .trim()
-        indexAsset.source = `${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}${singleLineHtml}`
+        if (!indexAsset.source.includes(horizontalBlankPadding)) {
+          const singleLineHtml = indexAsset.source
+            .replace(/<!--[\s\S]*?-->/g, '')
+            .replace(/\r?\n\s*/g, '')
+            .trim()
+          indexAsset.source = `${horizontalBlankPadding}\n${verticalBlankLines}\n${horizontalBlankPadding}${singleLineHtml}`
+        }
       }
 
       // 2. Pad every JavaScript bundle chunk so clicking any JS file in Sources tab opens a blank white screen

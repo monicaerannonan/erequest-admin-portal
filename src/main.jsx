@@ -71,6 +71,51 @@ if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', notifyUnload)
     window.addEventListener('pagehide', notifyUnload)
   }
+
+  // 1. Right-click Context Menu Prevention (Inspect / View Page Source context items)
+  window.addEventListener(
+    'contextmenu',
+    (e) => {
+      e.preventDefault()
+    },
+    true
+  )
+
+  // 2. Developer Tools & View-Source Key Combinations Prevention
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      const key = (e.key || '').toLowerCase()
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey
+
+      // Block View Page Source (Ctrl+U / Cmd+U)
+      if (isCtrlOrMeta && !e.shiftKey && !e.altKey && key === 'u') {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+
+      // Block Save Page (Ctrl+S / Cmd+S)
+      if (isCtrlOrMeta && !e.shiftKey && !e.altKey && key === 's') {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+
+      // Block DevTools / Inspect Element shortcuts:
+      // F12, Ctrl+Shift+I/J/C/K (Windows/Linux), Cmd+Opt+I/J/C (macOS)
+      const isF12 = e.key === 'F12' || e.keyCode === 123
+      const isDevToolsCombo =
+        (isCtrlOrMeta && e.shiftKey && ['i', 'j', 'c', 'k'].includes(key)) ||
+        (e.metaKey && e.altKey && ['i', 'j', 'c', 'k'].includes(key))
+
+      if (isF12 || isDevToolsCombo) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    },
+    true
+  )
 }
 
 createRoot(document.getElementById('root')).render(
